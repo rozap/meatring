@@ -30,6 +30,10 @@ defmodule Meatring.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    [{:exkad, git: "https://github.com/rozap/exkad.git"}]
+    [
+      {:exkad, git: "https://github.com/rozap/exkad.git"},
+      {:plug, "~> 0.8.2"},
+      {:poison, "~> 1.2.0"}
+    ]
   end
 end

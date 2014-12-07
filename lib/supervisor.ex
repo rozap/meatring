@@ -1,6 +1,7 @@
 defmodule Meatring.Supervisor do
   
   use Supervisor
+  require Logger
 
   def start_link(options) do
     {pid, descriptor} = Exkad.Node.Gateway.build_node(
@@ -9,11 +10,13 @@ defmodule Meatring.Supervisor do
       :http, 
       options[:bind]
     )
-    Logger.debug("Node has been created with descriptor: #{descriptor}")
+
+
+    Plug.Adapters.Cowboy.http(Meatring.Plug, [node: pid], port: options.server_port)
+
+    Logger.debug("Node #{inspect pid} has been created with descriptor: #{descriptor}")
+    
     {pid, descriptor}
 
   end
-
-
-  defp child(children, mod, args, true), do: [worker(mod, args) | children]
 end
