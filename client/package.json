@@ -1,0 +1,31 @@
+{
+	"name": "",
+	"private": true,
+	"version": "0.0.0",
+	"description": "",
+	"dependencies": {
+		"optimist": "0.3.4",
+		"browserify": "latest",
+		"backbone": "latest",
+		"underscore": "latest",
+		"jquery": "latest",
+		"moment": "latest",
+		"vinyl-source-stream": "latest",
+		"stringify": "latest",
+		"markdown": "latest",
+		"json-markup": "latest",
+		"webrtc2images" : "latest"
+	},
+	"devDependencies": {
+		"gulp": "latest",
+		"gulp-less": "latest",
+		"gulp-uglify": "^0.3.1",
+		"gulp-minify-css": "latest",
+		"gulp-sourcemaps": "^1.1.1",
+		"gulp-browserify": "latest",
+		"vinyl-buffer": "latest"
+	},
+	"repository": "",
+	"author": "",
+	"license": ""
+}

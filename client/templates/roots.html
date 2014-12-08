@@ -1,0 +1,21 @@
+
+<% if(!hasView('makePost')) { %>
+	<a href="javascript:;" class="make-post-button pure-button pure-button-primary">
+		New Post
+	</a>
+<% } %>
+
+
+<div id="make-root-post" class="make-post">
+
+</div>
+
+<ul class="roots">
+	<% posts.each(function(post) { %>
+		<li class="root">
+			<%- post.get('key') %>
+			<%- post.get('data') %>
+		</li>
+
+	<% }); %>
+</ul>

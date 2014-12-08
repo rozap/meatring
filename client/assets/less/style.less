@@ -1,0 +1,45 @@
+@import "pure.less";
+
+@unit: 16px;
+
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: @unit;
+}
+
+.head {
+	letter-spacing: .5em;
+	margin-bottom: 2 * @unit;
+}
+.make-post-button {
+	position: fixed;
+	top:@unit;
+	right:@unit;
+}
+
+.make-post {
+	padding: @unit;
+
+	.post-stuff {
+		div, textarea {
+			display: inline-block;
+		}		
+		textarea {
+			width: ~'calc(100% - 360px)';
+			min-height: 180px;
+		}
+	}
+
+}
+
+.controls { 
+	padding: @unit 0px;
+}
+
+ul.roots {
+	list-style: none;
+	padding-left: @unit;
+}
+

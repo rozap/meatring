@@ -1,16 +1,19 @@
 
 defmodule Meatring.Plug do
   import Plug.Conn
-  alias Exkad.Node.Gateway, as: DHT
+
 
   defmodule API do
     use Plug.Router
     import Plug.Conn
+    alias Exkad.Node.Gateway, as: DHT
     plug Plug.Static, at: "/static", from: :meatring
     plug :match
     plug :dispatch
 
-    def as_json({:ok, res}), do: as_json(%{"ok" => res})
+    @index "../priv/templates/index.html"
+
+    def as_json({:ok, res}), do: as_json(res)
     def as_json({:value, res}), do: as_json(res)
 
     def as_json(r) do
@@ -25,7 +28,7 @@ defmodule Meatring.Plug do
     end
 
 
-    put "/api/item" do
+    post "/api/item" do
       {:ok, body, conn} = read_body(conn) 
       js = body |> Poison.decode!
       try do
@@ -40,15 +43,33 @@ defmodule Meatring.Plug do
 
 
     get "/api/item/:key" do
-      [_, _, key] = conn.path_info
-      IO.puts "GEt #{key}"
       DHT.get(conn.plug_options.node, key) |> finish(conn)
     end
 
     get "/api/search/:term" do
-      [_, _, term] = conn.path_info
-      IO.inspect "Searching for #{term}"
-      DHT.search(conn.plug_options.node, term) |> finish(conn, 200)
+      DHT.search(conn.plug_options.node, term) 
+        |> Enum.map(fn key -> 
+          IO.puts "Getting #{key}"
+
+          data = case DHT.get(conn.plug_options.node, key) do
+            {:value, {:ok, res}} ->  res
+            {:error, :not_found} ->  "not found"
+          end
+
+          %{
+            key: key,
+            data: data
+          }
+        end)
+        |> finish(conn, 200)
+    end
+
+
+    get "/" do
+      idx = Path.join([__DIR__, @index])
+        |> Path.expand
+        |> EEx.eval_file
+      send_resp(conn, 200, idx)
     end
 
     match _ do
@@ -60,7 +81,6 @@ defmodule Meatring.Plug do
 
 
   def init(options) do
-    IO.inspect "Started plug with #{inspect options}"
     Enum.into(options, %{})
   end
 
