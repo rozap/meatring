@@ -1,0 +1,35 @@
+<% if(parent.keys().length) { %>
+	<div class="post parent-post">
+		<video src="<%- parent.get('video') %>" autoplay="autoplay" loop />
+		<div class="post-title">
+			<p><%- parent.get('text') %></p>
+		</div>
+	</div>
+<% } %>
+
+
+
+<div class="post-controls">
+
+	<% if(!hasView('makePost')) { %>
+		<a href="javascript:;" class="make-post-button pure-button pure-button-primary button-small">
+			New Post
+		</a>
+	<% } %>
+</div>
+
+<div id="make-root-post" class="make-post"></div>
+
+<ul class="posts">
+	<% posts.each(function(post) { %>
+		<li class="post">
+
+			<video src="<%- post.get('data').video %>" autoplay="autoplay" loop />
+			<div class="post-title">
+				<p>
+					<%- post.get('data').text %>
+				</p>
+			</div>
+		</li>
+	<% }); %>
+</ul>

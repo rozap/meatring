@@ -6,37 +6,42 @@ var MakePost = require('./make-post');
 
 module.exports = View.extend({
 
-	template: _.template(IndexTemplate),
-	el: '#main',
+    template: _.template(IndexTemplate),
+    el: '#main',
 
-	include: ['posts'],
+    include: ['posts'],
 
-	events: {
-		'click .make-post-button': 'makePost'
-	},
+    events: {
+        'click .make-post-button': 'makePost'
+    },
 
-
-
-	onStart: function() {
-
-		this.posts = new Posts([], {
-			parent: 'root'
-		});
-		this.render();
-
-		this.listenTo(this.posts, 'sync', this.renderIt);
-		this.posts.fetch();
-	},
+    parentPost: 'root',
 
 
-	makePost: function() {
-		this.spawn('makePost', new MakePost({
-			app: this.app,
-			el: '#make-root-post',
-			parentPost: 'root'
-		}));
-		this.render();
-	}
+    onStart: function() {
+
+        this.posts = new Posts([], {
+            parentPost: this.parentPost
+        });
+        this.render();
+
+        this.listenTo(this.posts, 'sync', this.onFetched);
+        this.posts.fetch();
+    },
+
+    onFetched: function() {
+        this.render();
+    },
+
+
+    makePost: function() {
+        this.spawn('makePost', new MakePost({
+            app: this.app,
+            el: '#make-' + this.parentPost + '-post',
+            parentPost: this.parentPost
+        }));
+        this.render();
+    }
 
 
 

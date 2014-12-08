@@ -14,7 +14,9 @@
 		"stringify": "latest",
 		"markdown": "latest",
 		"json-markup": "latest",
-		"webrtc2images" : "latest"
+		"async" : "latest",
+		"webrtc2images" : "latest",
+		"whammy" : "latest"
 	},
 	"devDependencies": {
 		"gulp": "latest",

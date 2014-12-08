@@ -8,31 +8,39 @@ $(document).ready(function( ){
 	new Router();
 })
 
-},{"./router":4,"backbone":9,"jquery":10}],2:[function(require,module,exports){
+},{"./router":4,"backbone":10,"jquery":12}],2:[function(require,module,exports){
 var Backbone = require('backbone');
 
 module.exports = Backbone.Collection.extend({
 
 	initialize: function(models, opts) {
-		this._parent = opts.parent;
+		this._parent = opts.parentPost;
 		if (!this._parent) throw new Error("Specify a parent for the collection");
 	},
-	
+
 
 	url: function() {
-		return '/api/search/' + this._parent
+		return '/api/search/' + this._parent;
 	}
-
 });
-},{"backbone":9}],3:[function(require,module,exports){
+},{"backbone":10}],3:[function(require,module,exports){
 var Backbone = require('backbone');
 
 module.exports = Backbone.Model.extend({
-	url : function() {
-		return '/api/item';
-	}
+    idAttribute: 'key',
+    url: function() {
+        return '/api/item' + (this.get('key') ? '/' + this.get('key') : '');
+    },
+
+    parse: function(resp) {
+        return {
+            key: this.get('key'),
+            data: resp
+        };
+    }
+
 });
-},{"backbone":9}],4:[function(require,module,exports){
+},{"backbone":10}],4:[function(require,module,exports){
 var _ = require('underscore');
 var Backbone = require('backbone');
 
@@ -55,11 +63,11 @@ module.exports = Backbone.Router.extend({
 
 	},
 
-	_create: function(View) {
+	_create: function(View, opts) {
 		if (this._view) this._view.end();
-		this._view = new View({
+		this._view = new View(_.extend({
 			app: this.app
-		});
+		}, opts));
 		this._view.onStart();
 	},
 
@@ -68,19 +76,23 @@ module.exports = Backbone.Router.extend({
 		this._create(Roots);
 	},
 
-	post: function() {
+	post: function(parentPost) {
 		console.log("post");
-		this._create(Post)
+		this._create(Post, {
+			parentPost : parentPost
+		})
 	}
 
 });
-},{"./views/post":6,"./views/roots":7,"backbone":9,"underscore":12}],5:[function(require,module,exports){
+},{"./views/post":6,"./views/roots":7,"backbone":10,"underscore":14}],5:[function(require,module,exports){
 var _ = require('underscore');
 var View = require('./view');
 var MakePostTemplate = require('../../templates/make-post.html');
 var MakePost = require('./make-post');
 var Webrtc2images = require('webrtc2images');
+var Whammy = require('whammy');
 var Post = require('../models/post');
+var async = require('async');
 
 module.exports = View.extend({
 
@@ -91,6 +103,11 @@ module.exports = View.extend({
         'click .nvm': 'end'
     },
 
+    _width: 160,
+    _height: 120,
+    _frames: 30,
+    _interval: 120,
+
 
 
     onStart: function() {
@@ -99,14 +116,20 @@ module.exports = View.extend({
         this.render();
     },
 
+    fps: function() {
+        //interval can't be less than 100 or weird shit starts happening...UGH
+        // console.log(Math.floor(1000 / this._interval), 'fps');
+        return 20
+    },
+
     post: function() {
         this.rtc2images = new Webrtc2images({
-            width: 320,
-            height: 180,
-            frames: 10,
+            width: this._width,
+            height: this._height,
+            frames: this._frames,
             type: 'image/jpeg',
-            quality: 0.4,
-            interval: 200
+            quality: 0.6,
+            interval: this._interval
         });
 
         this.rtc2images.startVideo(function(err) {
@@ -117,42 +140,123 @@ module.exports = View.extend({
 
     },
 
+    _onSuccess: function(res) {
+        console.log(res);
+    },
+
+    _onError: function() {
+        console.warn('aw shit');
+    },
+
+
+    _createPost: function(url) {
+        var text = this.$el.find('textarea').val();
+        new Post({
+            data: {
+                video: url,
+                text: text
+            },
+            meta: {
+                parentPost: this.parentPost
+            }
+        }).save().then(this._onSuccess, this._onError);
+    },
+
+    _framesToWebm: function(frames) {
+        var encoder = new Whammy.Video(this.fps());
+        var can = document.createElement('canvas');
+        var image = new Image(this._width, this._height);
+        can.width = this._width;
+        can.height = this._height;
+
+
+        async.mapSeries(frames, function(frame, cb) {
+            var ctx = can.getContext('2d');
+            image.onload = function() {
+                ctx.drawImage(image, 0, 0, this._width, this._height)
+
+                encoder.add(ctx);
+
+                cb();
+            }.bind(this);
+            image.src = frame;
+        }.bind(this), function() {
+            var res = encoder.compile();
+            var fr = new FileReader()
+
+            fr.onloadend = function() {
+                this._createPost(fr.result);
+
+            }.bind(this);
+            fr.readAsDataURL(res);
+        }.bind(this))
+
+    },
+
 
     submitPost: function() {
-        var text = this.$el.find('textarea').val();
         this.rtc2images.recordVideo(function(err, frames) {
             if (err) {
                 console.log(err);
-            } else {
-                console.log(frames);
-
-                var post = new Post({
-                    data: {
-                        frames: frames,
-                        text: text,
-
-                    },
-                    meta: {
-                        parent: this.parentPost
-                    }
-                });
-
-                post.save();
+                return;
             }
-        });
+            console.log(frames);
+            this._framesToWebm(frames)
+
+        }.bind(this));
     }
 
 
 
 });
-},{"../../templates/make-post.html":23,"../models/post":3,"./make-post":5,"./view":8,"underscore":12,"webrtc2images":13}],6:[function(require,module,exports){
+},{"../../templates/make-post.html":26,"../models/post":3,"./make-post":5,"./view":8,"async":9,"underscore":14,"webrtc2images":15,"whammy":25}],6:[function(require,module,exports){
+var _ = require('underscore');
 var View = require('./view');
+var Roots = require('./roots');
+var Post = require('../models/post');
+var PostTemplate = require('../../templates/post.html');
 
-module.exports = View.extend({
 
 
-})
-},{"./view":8}],7:[function(require,module,exports){
+var SubPostView = Roots.extend({
+    include: ['parent', 'posts', 'parentPost'],
+    template: _.template(PostTemplate),
+
+    onFetched: function() {
+        this.render();
+        this.posts.each(function(post) {
+            this.spawn('subPost' + post.get('key'), new SubPostView({
+                app: this.app,
+                parentPost: post.get('key'),
+                parent: post,
+                el: '#sub-' + post.get('key') + '-posts'
+            }));
+        }.bind(this));
+    }
+
+});
+
+
+var ParentPostView = SubPostView.extend({
+
+
+
+    onStart: function() {
+        this.parent = new Post({
+            key: this.parentPost
+        });
+        Roots.prototype.onStart.call(this);
+        this.listenTo(this.parent, 'sync', this.renderIt);
+        this.parent.fetch();
+    },
+
+
+});
+
+
+
+module.exports = ParentPostView;
+},{"../../templates/post.html":27,"../models/post":3,"./roots":7,"./view":8,"underscore":14}],7:[function(require,module,exports){
 var _ = require('underscore');
 var View = require('./view');
 var IndexTemplate = require('../../templates/roots.html');
@@ -161,42 +265,47 @@ var MakePost = require('./make-post');
 
 module.exports = View.extend({
 
-	template: _.template(IndexTemplate),
-	el: '#main',
+    template: _.template(IndexTemplate),
+    el: '#main',
 
-	include: ['posts'],
+    include: ['posts'],
 
-	events: {
-		'click .make-post-button': 'makePost'
-	},
+    events: {
+        'click .make-post-button': 'makePost'
+    },
 
-
-
-	onStart: function() {
-
-		this.posts = new Posts([], {
-			parent: 'root'
-		});
-		this.render();
-
-		this.listenTo(this.posts, 'sync', this.renderIt);
-		this.posts.fetch();
-	},
+    parentPost: 'root',
 
 
-	makePost: function() {
-		this.spawn('makePost', new MakePost({
-			app: this.app,
-			el: '#make-root-post',
-			parentPost: 'root'
-		}));
-		this.render();
-	}
+    onStart: function() {
+
+        this.posts = new Posts([], {
+            parentPost: this.parentPost
+        });
+        this.render();
+
+        this.listenTo(this.posts, 'sync', this.onFetched);
+        this.posts.fetch();
+    },
+
+    onFetched: function() {
+        this.render();
+    },
+
+
+    makePost: function() {
+        this.spawn('makePost', new MakePost({
+            app: this.app,
+            el: '#make-' + this.parentPost + '-post',
+            parentPost: this.parentPost
+        }));
+        this.render();
+    }
 
 
 
 });
-},{"../../templates/roots.html":24,"../collections/posts":2,"./make-post":5,"./view":8,"underscore":12}],8:[function(require,module,exports){
+},{"../../templates/roots.html":28,"../collections/posts":2,"./make-post":5,"./view":8,"underscore":14}],8:[function(require,module,exports){
 var Backbone = require('backbone'),
     _ = require('underscore'),
     $ = require('jquery'),
@@ -342,7 +451,1134 @@ module.exports = Backbone.View.extend({
     }
 
 });
-},{"../../templates/util/error.html":25,"backbone":9,"jquery":10,"moment":11,"underscore":12}],9:[function(require,module,exports){
+},{"../../templates/util/error.html":29,"backbone":10,"jquery":12,"moment":13,"underscore":14}],9:[function(require,module,exports){
+(function (process){
+/*!
+ * async
+ * https://github.com/caolan/async
+ *
+ * Copyright 2010-2014 Caolan McMahon
+ * Released under the MIT license
+ */
+/*jshint onevar: false, indent:4 */
+/*global setImmediate: false, setTimeout: false, console: false */
+(function () {
+
+    var async = {};
+
+    // global on the server, window in the browser
+    var root, previous_async;
+
+    root = this;
+    if (root != null) {
+      previous_async = root.async;
+    }
+
+    async.noConflict = function () {
+        root.async = previous_async;
+        return async;
+    };
+
+    function only_once(fn) {
+        var called = false;
+        return function() {
+            if (called) throw new Error("Callback was already called.");
+            called = true;
+            fn.apply(root, arguments);
+        }
+    }
+
+    //// cross-browser compatiblity functions ////
+
+    var _toString = Object.prototype.toString;
+
+    var _isArray = Array.isArray || function (obj) {
+        return _toString.call(obj) === '[object Array]';
+    };
+
+    var _each = function (arr, iterator) {
+        if (arr.forEach) {
+            return arr.forEach(iterator);
+        }
+        for (var i = 0; i < arr.length; i += 1) {
+            iterator(arr[i], i, arr);
+        }
+    };
+
+    var _map = function (arr, iterator) {
+        if (arr.map) {
+            return arr.map(iterator);
+        }
+        var results = [];
+        _each(arr, function (x, i, a) {
+            results.push(iterator(x, i, a));
+        });
+        return results;
+    };
+
+    var _reduce = function (arr, iterator, memo) {
+        if (arr.reduce) {
+            return arr.reduce(iterator, memo);
+        }
+        _each(arr, function (x, i, a) {
+            memo = iterator(memo, x, i, a);
+        });
+        return memo;
+    };
+
+    var _keys = function (obj) {
+        if (Object.keys) {
+            return Object.keys(obj);
+        }
+        var keys = [];
+        for (var k in obj) {
+            if (obj.hasOwnProperty(k)) {
+                keys.push(k);
+            }
+        }
+        return keys;
+    };
+
+    //// exported async module functions ////
+
+    //// nextTick implementation with browser-compatible fallback ////
+    if (typeof process === 'undefined' || !(process.nextTick)) {
+        if (typeof setImmediate === 'function') {
+            async.nextTick = function (fn) {
+                // not a direct alias for IE10 compatibility
+                setImmediate(fn);
+            };
+            async.setImmediate = async.nextTick;
+        }
+        else {
+            async.nextTick = function (fn) {
+                setTimeout(fn, 0);
+            };
+            async.setImmediate = async.nextTick;
+        }
+    }
+    else {
+        async.nextTick = process.nextTick;
+        if (typeof setImmediate !== 'undefined') {
+            async.setImmediate = function (fn) {
+              // not a direct alias for IE10 compatibility
+              setImmediate(fn);
+            };
+        }
+        else {
+            async.setImmediate = async.nextTick;
+        }
+    }
+
+    async.each = function (arr, iterator, callback) {
+        callback = callback || function () {};
+        if (!arr.length) {
+            return callback();
+        }
+        var completed = 0;
+        _each(arr, function (x) {
+            iterator(x, only_once(done) );
+        });
+        function done(err) {
+          if (err) {
+              callback(err);
+              callback = function () {};
+          }
+          else {
+              completed += 1;
+              if (completed >= arr.length) {
+                  callback();
+              }
+          }
+        }
+    };
+    async.forEach = async.each;
+
+    async.eachSeries = function (arr, iterator, callback) {
+        callback = callback || function () {};
+        if (!arr.length) {
+            return callback();
+        }
+        var completed = 0;
+        var iterate = function () {
+            iterator(arr[completed], function (err) {
+                if (err) {
+                    callback(err);
+                    callback = function () {};
+                }
+                else {
+                    completed += 1;
+                    if (completed >= arr.length) {
+                        callback();
+                    }
+                    else {
+                        iterate();
+                    }
+                }
+            });
+        };
+        iterate();
+    };
+    async.forEachSeries = async.eachSeries;
+
+    async.eachLimit = function (arr, limit, iterator, callback) {
+        var fn = _eachLimit(limit);
+        fn.apply(null, [arr, iterator, callback]);
+    };
+    async.forEachLimit = async.eachLimit;
+
+    var _eachLimit = function (limit) {
+
+        return function (arr, iterator, callback) {
+            callback = callback || function () {};
+            if (!arr.length || limit <= 0) {
+                return callback();
+            }
+            var completed = 0;
+            var started = 0;
+            var running = 0;
+
+            (function replenish () {
+                if (completed >= arr.length) {
+                    return callback();
+                }
+
+                while (running < limit && started < arr.length) {
+                    started += 1;
+                    running += 1;
+                    iterator(arr[started - 1], function (err) {
+                        if (err) {
+                            callback(err);
+                            callback = function () {};
+                        }
+                        else {
+                            completed += 1;
+                            running -= 1;
+                            if (completed >= arr.length) {
+                                callback();
+                            }
+                            else {
+                                replenish();
+                            }
+                        }
+                    });
+                }
+            })();
+        };
+    };
+
+
+    var doParallel = function (fn) {
+        return function () {
+            var args = Array.prototype.slice.call(arguments);
+            return fn.apply(null, [async.each].concat(args));
+        };
+    };
+    var doParallelLimit = function(limit, fn) {
+        return function () {
+            var args = Array.prototype.slice.call(arguments);
+            return fn.apply(null, [_eachLimit(limit)].concat(args));
+        };
+    };
+    var doSeries = function (fn) {
+        return function () {
+            var args = Array.prototype.slice.call(arguments);
+            return fn.apply(null, [async.eachSeries].concat(args));
+        };
+    };
+
+
+    var _asyncMap = function (eachfn, arr, iterator, callback) {
+        arr = _map(arr, function (x, i) {
+            return {index: i, value: x};
+        });
+        if (!callback) {
+            eachfn(arr, function (x, callback) {
+                iterator(x.value, function (err) {
+                    callback(err);
+                });
+            });
+        } else {
+            var results = [];
+            eachfn(arr, function (x, callback) {
+                iterator(x.value, function (err, v) {
+                    results[x.index] = v;
+                    callback(err);
+                });
+            }, function (err) {
+                callback(err, results);
+            });
+        }
+    };
+    async.map = doParallel(_asyncMap);
+    async.mapSeries = doSeries(_asyncMap);
+    async.mapLimit = function (arr, limit, iterator, callback) {
+        return _mapLimit(limit)(arr, iterator, callback);
+    };
+
+    var _mapLimit = function(limit) {
+        return doParallelLimit(limit, _asyncMap);
+    };
+
+    // reduce only has a series version, as doing reduce in parallel won't
+    // work in many situations.
+    async.reduce = function (arr, memo, iterator, callback) {
+        async.eachSeries(arr, function (x, callback) {
+            iterator(memo, x, function (err, v) {
+                memo = v;
+                callback(err);
+            });
+        }, function (err) {
+            callback(err, memo);
+        });
+    };
+    // inject alias
+    async.inject = async.reduce;
+    // foldl alias
+    async.foldl = async.reduce;
+
+    async.reduceRight = function (arr, memo, iterator, callback) {
+        var reversed = _map(arr, function (x) {
+            return x;
+        }).reverse();
+        async.reduce(reversed, memo, iterator, callback);
+    };
+    // foldr alias
+    async.foldr = async.reduceRight;
+
+    var _filter = function (eachfn, arr, iterator, callback) {
+        var results = [];
+        arr = _map(arr, function (x, i) {
+            return {index: i, value: x};
+        });
+        eachfn(arr, function (x, callback) {
+            iterator(x.value, function (v) {
+                if (v) {
+                    results.push(x);
+                }
+                callback();
+            });
+        }, function (err) {
+            callback(_map(results.sort(function (a, b) {
+                return a.index - b.index;
+            }), function (x) {
+                return x.value;
+            }));
+        });
+    };
+    async.filter = doParallel(_filter);
+    async.filterSeries = doSeries(_filter);
+    // select alias
+    async.select = async.filter;
+    async.selectSeries = async.filterSeries;
+
+    var _reject = function (eachfn, arr, iterator, callback) {
+        var results = [];
+        arr = _map(arr, function (x, i) {
+            return {index: i, value: x};
+        });
+        eachfn(arr, function (x, callback) {
+            iterator(x.value, function (v) {
+                if (!v) {
+                    results.push(x);
+                }
+                callback();
+            });
+        }, function (err) {
+            callback(_map(results.sort(function (a, b) {
+                return a.index - b.index;
+            }), function (x) {
+                return x.value;
+            }));
+        });
+    };
+    async.reject = doParallel(_reject);
+    async.rejectSeries = doSeries(_reject);
+
+    var _detect = function (eachfn, arr, iterator, main_callback) {
+        eachfn(arr, function (x, callback) {
+            iterator(x, function (result) {
+                if (result) {
+                    main_callback(x);
+                    main_callback = function () {};
+                }
+                else {
+                    callback();
+                }
+            });
+        }, function (err) {
+            main_callback();
+        });
+    };
+    async.detect = doParallel(_detect);
+    async.detectSeries = doSeries(_detect);
+
+    async.some = function (arr, iterator, main_callback) {
+        async.each(arr, function (x, callback) {
+            iterator(x, function (v) {
+                if (v) {
+                    main_callback(true);
+                    main_callback = function () {};
+                }
+                callback();
+            });
+        }, function (err) {
+            main_callback(false);
+        });
+    };
+    // any alias
+    async.any = async.some;
+
+    async.every = function (arr, iterator, main_callback) {
+        async.each(arr, function (x, callback) {
+            iterator(x, function (v) {
+                if (!v) {
+                    main_callback(false);
+                    main_callback = function () {};
+                }
+                callback();
+            });
+        }, function (err) {
+            main_callback(true);
+        });
+    };
+    // all alias
+    async.all = async.every;
+
+    async.sortBy = function (arr, iterator, callback) {
+        async.map(arr, function (x, callback) {
+            iterator(x, function (err, criteria) {
+                if (err) {
+                    callback(err);
+                }
+                else {
+                    callback(null, {value: x, criteria: criteria});
+                }
+            });
+        }, function (err, results) {
+            if (err) {
+                return callback(err);
+            }
+            else {
+                var fn = function (left, right) {
+                    var a = left.criteria, b = right.criteria;
+                    return a < b ? -1 : a > b ? 1 : 0;
+                };
+                callback(null, _map(results.sort(fn), function (x) {
+                    return x.value;
+                }));
+            }
+        });
+    };
+
+    async.auto = function (tasks, callback) {
+        callback = callback || function () {};
+        var keys = _keys(tasks);
+        var remainingTasks = keys.length
+        if (!remainingTasks) {
+            return callback();
+        }
+
+        var results = {};
+
+        var listeners = [];
+        var addListener = function (fn) {
+            listeners.unshift(fn);
+        };
+        var removeListener = function (fn) {
+            for (var i = 0; i < listeners.length; i += 1) {
+                if (listeners[i] === fn) {
+                    listeners.splice(i, 1);
+                    return;
+                }
+            }
+        };
+        var taskComplete = function () {
+            remainingTasks--
+            _each(listeners.slice(0), function (fn) {
+                fn();
+            });
+        };
+
+        addListener(function () {
+            if (!remainingTasks) {
+                var theCallback = callback;
+                // prevent final callback from calling itself if it errors
+                callback = function () {};
+
+                theCallback(null, results);
+            }
+        });
+
+        _each(keys, function (k) {
+            var task = _isArray(tasks[k]) ? tasks[k]: [tasks[k]];
+            var taskCallback = function (err) {
+                var args = Array.prototype.slice.call(arguments, 1);
+                if (args.length <= 1) {
+                    args = args[0];
+                }
+                if (err) {
+                    var safeResults = {};
+                    _each(_keys(results), function(rkey) {
+                        safeResults[rkey] = results[rkey];
+                    });
+                    safeResults[k] = args;
+                    callback(err, safeResults);
+                    // stop subsequent errors hitting callback multiple times
+                    callback = function () {};
+                }
+                else {
+                    results[k] = args;
+                    async.setImmediate(taskComplete);
+                }
+            };
+            var requires = task.slice(0, Math.abs(task.length - 1)) || [];
+            var ready = function () {
+                return _reduce(requires, function (a, x) {
+                    return (a && results.hasOwnProperty(x));
+                }, true) && !results.hasOwnProperty(k);
+            };
+            if (ready()) {
+                task[task.length - 1](taskCallback, results);
+            }
+            else {
+                var listener = function () {
+                    if (ready()) {
+                        removeListener(listener);
+                        task[task.length - 1](taskCallback, results);
+                    }
+                };
+                addListener(listener);
+            }
+        });
+    };
+
+    async.retry = function(times, task, callback) {
+        var DEFAULT_TIMES = 5;
+        var attempts = [];
+        // Use defaults if times not passed
+        if (typeof times === 'function') {
+            callback = task;
+            task = times;
+            times = DEFAULT_TIMES;
+        }
+        // Make sure times is a number
+        times = parseInt(times, 10) || DEFAULT_TIMES;
+        var wrappedTask = function(wrappedCallback, wrappedResults) {
+            var retryAttempt = function(task, finalAttempt) {
+                return function(seriesCallback) {
+                    task(function(err, result){
+                        seriesCallback(!err || finalAttempt, {err: err, result: result});
+                    }, wrappedResults);
+                };
+            };
+            while (times) {
+                attempts.push(retryAttempt(task, !(times-=1)));
+            }
+            async.series(attempts, function(done, data){
+                data = data[data.length - 1];
+                (wrappedCallback || callback)(data.err, data.result);
+            });
+        }
+        // If a callback is passed, run this as a controll flow
+        return callback ? wrappedTask() : wrappedTask
+    };
+
+    async.waterfall = function (tasks, callback) {
+        callback = callback || function () {};
+        if (!_isArray(tasks)) {
+          var err = new Error('First argument to waterfall must be an array of functions');
+          return callback(err);
+        }
+        if (!tasks.length) {
+            return callback();
+        }
+        var wrapIterator = function (iterator) {
+            return function (err) {
+                if (err) {
+                    callback.apply(null, arguments);
+                    callback = function () {};
+                }
+                else {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    var next = iterator.next();
+                    if (next) {
+                        args.push(wrapIterator(next));
+                    }
+                    else {
+                        args.push(callback);
+                    }
+                    async.setImmediate(function () {
+                        iterator.apply(null, args);
+                    });
+                }
+            };
+        };
+        wrapIterator(async.iterator(tasks))();
+    };
+
+    var _parallel = function(eachfn, tasks, callback) {
+        callback = callback || function () {};
+        if (_isArray(tasks)) {
+            eachfn.map(tasks, function (fn, callback) {
+                if (fn) {
+                    fn(function (err) {
+                        var args = Array.prototype.slice.call(arguments, 1);
+                        if (args.length <= 1) {
+                            args = args[0];
+                        }
+                        callback.call(null, err, args);
+                    });
+                }
+            }, callback);
+        }
+        else {
+            var results = {};
+            eachfn.each(_keys(tasks), function (k, callback) {
+                tasks[k](function (err) {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    if (args.length <= 1) {
+                        args = args[0];
+                    }
+                    results[k] = args;
+                    callback(err);
+                });
+            }, function (err) {
+                callback(err, results);
+            });
+        }
+    };
+
+    async.parallel = function (tasks, callback) {
+        _parallel({ map: async.map, each: async.each }, tasks, callback);
+    };
+
+    async.parallelLimit = function(tasks, limit, callback) {
+        _parallel({ map: _mapLimit(limit), each: _eachLimit(limit) }, tasks, callback);
+    };
+
+    async.series = function (tasks, callback) {
+        callback = callback || function () {};
+        if (_isArray(tasks)) {
+            async.mapSeries(tasks, function (fn, callback) {
+                if (fn) {
+                    fn(function (err) {
+                        var args = Array.prototype.slice.call(arguments, 1);
+                        if (args.length <= 1) {
+                            args = args[0];
+                        }
+                        callback.call(null, err, args);
+                    });
+                }
+            }, callback);
+        }
+        else {
+            var results = {};
+            async.eachSeries(_keys(tasks), function (k, callback) {
+                tasks[k](function (err) {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    if (args.length <= 1) {
+                        args = args[0];
+                    }
+                    results[k] = args;
+                    callback(err);
+                });
+            }, function (err) {
+                callback(err, results);
+            });
+        }
+    };
+
+    async.iterator = function (tasks) {
+        var makeCallback = function (index) {
+            var fn = function () {
+                if (tasks.length) {
+                    tasks[index].apply(null, arguments);
+                }
+                return fn.next();
+            };
+            fn.next = function () {
+                return (index < tasks.length - 1) ? makeCallback(index + 1): null;
+            };
+            return fn;
+        };
+        return makeCallback(0);
+    };
+
+    async.apply = function (fn) {
+        var args = Array.prototype.slice.call(arguments, 1);
+        return function () {
+            return fn.apply(
+                null, args.concat(Array.prototype.slice.call(arguments))
+            );
+        };
+    };
+
+    var _concat = function (eachfn, arr, fn, callback) {
+        var r = [];
+        eachfn(arr, function (x, cb) {
+            fn(x, function (err, y) {
+                r = r.concat(y || []);
+                cb(err);
+            });
+        }, function (err) {
+            callback(err, r);
+        });
+    };
+    async.concat = doParallel(_concat);
+    async.concatSeries = doSeries(_concat);
+
+    async.whilst = function (test, iterator, callback) {
+        if (test()) {
+            iterator(function (err) {
+                if (err) {
+                    return callback(err);
+                }
+                async.whilst(test, iterator, callback);
+            });
+        }
+        else {
+            callback();
+        }
+    };
+
+    async.doWhilst = function (iterator, test, callback) {
+        iterator(function (err) {
+            if (err) {
+                return callback(err);
+            }
+            var args = Array.prototype.slice.call(arguments, 1);
+            if (test.apply(null, args)) {
+                async.doWhilst(iterator, test, callback);
+            }
+            else {
+                callback();
+            }
+        });
+    };
+
+    async.until = function (test, iterator, callback) {
+        if (!test()) {
+            iterator(function (err) {
+                if (err) {
+                    return callback(err);
+                }
+                async.until(test, iterator, callback);
+            });
+        }
+        else {
+            callback();
+        }
+    };
+
+    async.doUntil = function (iterator, test, callback) {
+        iterator(function (err) {
+            if (err) {
+                return callback(err);
+            }
+            var args = Array.prototype.slice.call(arguments, 1);
+            if (!test.apply(null, args)) {
+                async.doUntil(iterator, test, callback);
+            }
+            else {
+                callback();
+            }
+        });
+    };
+
+    async.queue = function (worker, concurrency) {
+        if (concurrency === undefined) {
+            concurrency = 1;
+        }
+        function _insert(q, data, pos, callback) {
+          if (!q.started){
+            q.started = true;
+          }
+          if (!_isArray(data)) {
+              data = [data];
+          }
+          if(data.length == 0) {
+             // call drain immediately if there are no tasks
+             return async.setImmediate(function() {
+                 if (q.drain) {
+                     q.drain();
+                 }
+             });
+          }
+          _each(data, function(task) {
+              var item = {
+                  data: task,
+                  callback: typeof callback === 'function' ? callback : null
+              };
+
+              if (pos) {
+                q.tasks.unshift(item);
+              } else {
+                q.tasks.push(item);
+              }
+
+              if (q.saturated && q.tasks.length === q.concurrency) {
+                  q.saturated();
+              }
+              async.setImmediate(q.process);
+          });
+        }
+
+        var workers = 0;
+        var q = {
+            tasks: [],
+            concurrency: concurrency,
+            saturated: null,
+            empty: null,
+            drain: null,
+            started: false,
+            paused: false,
+            push: function (data, callback) {
+              _insert(q, data, false, callback);
+            },
+            kill: function () {
+              q.drain = null;
+              q.tasks = [];
+            },
+            unshift: function (data, callback) {
+              _insert(q, data, true, callback);
+            },
+            process: function () {
+                if (!q.paused && workers < q.concurrency && q.tasks.length) {
+                    var task = q.tasks.shift();
+                    if (q.empty && q.tasks.length === 0) {
+                        q.empty();
+                    }
+                    workers += 1;
+                    var next = function () {
+                        workers -= 1;
+                        if (task.callback) {
+                            task.callback.apply(task, arguments);
+                        }
+                        if (q.drain && q.tasks.length + workers === 0) {
+                            q.drain();
+                        }
+                        q.process();
+                    };
+                    var cb = only_once(next);
+                    worker(task.data, cb);
+                }
+            },
+            length: function () {
+                return q.tasks.length;
+            },
+            running: function () {
+                return workers;
+            },
+            idle: function() {
+                return q.tasks.length + workers === 0;
+            },
+            pause: function () {
+                if (q.paused === true) { return; }
+                q.paused = true;
+                q.process();
+            },
+            resume: function () {
+                if (q.paused === false) { return; }
+                q.paused = false;
+                q.process();
+            }
+        };
+        return q;
+    };
+    
+    async.priorityQueue = function (worker, concurrency) {
+        
+        function _compareTasks(a, b){
+          return a.priority - b.priority;
+        };
+        
+        function _binarySearch(sequence, item, compare) {
+          var beg = -1,
+              end = sequence.length - 1;
+          while (beg < end) {
+            var mid = beg + ((end - beg + 1) >>> 1);
+            if (compare(item, sequence[mid]) >= 0) {
+              beg = mid;
+            } else {
+              end = mid - 1;
+            }
+          }
+          return beg;
+        }
+        
+        function _insert(q, data, priority, callback) {
+          if (!q.started){
+            q.started = true;
+          }
+          if (!_isArray(data)) {
+              data = [data];
+          }
+          if(data.length == 0) {
+             // call drain immediately if there are no tasks
+             return async.setImmediate(function() {
+                 if (q.drain) {
+                     q.drain();
+                 }
+             });
+          }
+          _each(data, function(task) {
+              var item = {
+                  data: task,
+                  priority: priority,
+                  callback: typeof callback === 'function' ? callback : null
+              };
+              
+              q.tasks.splice(_binarySearch(q.tasks, item, _compareTasks) + 1, 0, item);
+
+              if (q.saturated && q.tasks.length === q.concurrency) {
+                  q.saturated();
+              }
+              async.setImmediate(q.process);
+          });
+        }
+        
+        // Start with a normal queue
+        var q = async.queue(worker, concurrency);
+        
+        // Override push to accept second parameter representing priority
+        q.push = function (data, priority, callback) {
+          _insert(q, data, priority, callback);
+        };
+        
+        // Remove unshift function
+        delete q.unshift;
+
+        return q;
+    };
+
+    async.cargo = function (worker, payload) {
+        var working     = false,
+            tasks       = [];
+
+        var cargo = {
+            tasks: tasks,
+            payload: payload,
+            saturated: null,
+            empty: null,
+            drain: null,
+            drained: true,
+            push: function (data, callback) {
+                if (!_isArray(data)) {
+                    data = [data];
+                }
+                _each(data, function(task) {
+                    tasks.push({
+                        data: task,
+                        callback: typeof callback === 'function' ? callback : null
+                    });
+                    cargo.drained = false;
+                    if (cargo.saturated && tasks.length === payload) {
+                        cargo.saturated();
+                    }
+                });
+                async.setImmediate(cargo.process);
+            },
+            process: function process() {
+                if (working) return;
+                if (tasks.length === 0) {
+                    if(cargo.drain && !cargo.drained) cargo.drain();
+                    cargo.drained = true;
+                    return;
+                }
+
+                var ts = typeof payload === 'number'
+                            ? tasks.splice(0, payload)
+                            : tasks.splice(0, tasks.length);
+
+                var ds = _map(ts, function (task) {
+                    return task.data;
+                });
+
+                if(cargo.empty) cargo.empty();
+                working = true;
+                worker(ds, function () {
+                    working = false;
+
+                    var args = arguments;
+                    _each(ts, function (data) {
+                        if (data.callback) {
+                            data.callback.apply(null, args);
+                        }
+                    });
+
+                    process();
+                });
+            },
+            length: function () {
+                return tasks.length;
+            },
+            running: function () {
+                return working;
+            }
+        };
+        return cargo;
+    };
+
+    var _console_fn = function (name) {
+        return function (fn) {
+            var args = Array.prototype.slice.call(arguments, 1);
+            fn.apply(null, args.concat([function (err) {
+                var args = Array.prototype.slice.call(arguments, 1);
+                if (typeof console !== 'undefined') {
+                    if (err) {
+                        if (console.error) {
+                            console.error(err);
+                        }
+                    }
+                    else if (console[name]) {
+                        _each(args, function (x) {
+                            console[name](x);
+                        });
+                    }
+                }
+            }]));
+        };
+    };
+    async.log = _console_fn('log');
+    async.dir = _console_fn('dir');
+    /*async.info = _console_fn('info');
+    async.warn = _console_fn('warn');
+    async.error = _console_fn('error');*/
+
+    async.memoize = function (fn, hasher) {
+        var memo = {};
+        var queues = {};
+        hasher = hasher || function (x) {
+            return x;
+        };
+        var memoized = function () {
+            var args = Array.prototype.slice.call(arguments);
+            var callback = args.pop();
+            var key = hasher.apply(null, args);
+            if (key in memo) {
+                async.nextTick(function () {
+                    callback.apply(null, memo[key]);
+                });
+            }
+            else if (key in queues) {
+                queues[key].push(callback);
+            }
+            else {
+                queues[key] = [callback];
+                fn.apply(null, args.concat([function () {
+                    memo[key] = arguments;
+                    var q = queues[key];
+                    delete queues[key];
+                    for (var i = 0, l = q.length; i < l; i++) {
+                      q[i].apply(null, arguments);
+                    }
+                }]));
+            }
+        };
+        memoized.memo = memo;
+        memoized.unmemoized = fn;
+        return memoized;
+    };
+
+    async.unmemoize = function (fn) {
+      return function () {
+        return (fn.unmemoized || fn).apply(null, arguments);
+      };
+    };
+
+    async.times = function (count, iterator, callback) {
+        var counter = [];
+        for (var i = 0; i < count; i++) {
+            counter.push(i);
+        }
+        return async.map(counter, iterator, callback);
+    };
+
+    async.timesSeries = function (count, iterator, callback) {
+        var counter = [];
+        for (var i = 0; i < count; i++) {
+            counter.push(i);
+        }
+        return async.mapSeries(counter, iterator, callback);
+    };
+
+    async.seq = function (/* functions... */) {
+        var fns = arguments;
+        return function () {
+            var that = this;
+            var args = Array.prototype.slice.call(arguments);
+            var callback = args.pop();
+            async.reduce(fns, args, function (newargs, fn, cb) {
+                fn.apply(that, newargs.concat([function () {
+                    var err = arguments[0];
+                    var nextargs = Array.prototype.slice.call(arguments, 1);
+                    cb(err, nextargs);
+                }]))
+            },
+            function (err, results) {
+                callback.apply(that, [err].concat(results));
+            });
+        };
+    };
+
+    async.compose = function (/* functions... */) {
+      return async.seq.apply(null, Array.prototype.reverse.call(arguments));
+    };
+
+    var _applyEach = function (eachfn, fns /*args...*/) {
+        var go = function () {
+            var that = this;
+            var args = Array.prototype.slice.call(arguments);
+            var callback = args.pop();
+            return eachfn(fns, function (fn, cb) {
+                fn.apply(that, args.concat([cb]));
+            },
+            callback);
+        };
+        if (arguments.length > 2) {
+            var args = Array.prototype.slice.call(arguments, 2);
+            return go.apply(this, args);
+        }
+        else {
+            return go;
+        }
+    };
+    async.applyEach = doParallel(_applyEach);
+    async.applyEachSeries = doSeries(_applyEach);
+
+    async.forever = function (fn, callback) {
+        function next(err) {
+            if (err) {
+                if (callback) {
+                    return callback(err);
+                }
+                throw err;
+            }
+            fn(next);
+        }
+        next();
+    };
+
+    // Node.js
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = async;
+    }
+    // AMD / RequireJS
+    else if (typeof define !== 'undefined' && define.amd) {
+        define([], function () {
+            return async;
+        });
+    }
+    // included directly via <script> tag
+    else {
+        root.async = async;
+    }
+
+}());
+
+}).call(this,require('_process'))
+},{"_process":11}],10:[function(require,module,exports){
 //     Backbone.js 1.1.2
 
 //     (c) 2010-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -1952,7 +3188,95 @@ module.exports = Backbone.View.extend({
 
 }));
 
-},{"underscore":12}],10:[function(require,module,exports){
+},{"underscore":14}],11:[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined'
+    && window.setImmediate;
+    var canMutationObserver = typeof window !== 'undefined'
+    && window.MutationObserver;
+    var canPost = typeof window !== 'undefined'
+    && window.postMessage && window.addEventListener
+    ;
+
+    if (canSetImmediate) {
+        return function (f) { return window.setImmediate(f) };
+    }
+
+    var queue = [];
+
+    if (canMutationObserver) {
+        var hiddenDiv = document.createElement("div");
+        var observer = new MutationObserver(function () {
+            var queueList = queue.slice();
+            queue.length = 0;
+            queueList.forEach(function (fn) {
+                fn();
+            });
+        });
+
+        observer.observe(hiddenDiv, { attributes: true });
+
+        return function nextTick(fn) {
+            if (!queue.length) {
+                hiddenDiv.setAttribute('yes', 'no');
+            }
+            queue.push(fn);
+        };
+    }
+
+    if (canPost) {
+        window.addEventListener('message', function (ev) {
+            var source = ev.source;
+            if ((source === window || source === null) && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
+    };
+})();
+
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+};
+
+// TODO(shtylman)
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+
+},{}],12:[function(require,module,exports){
 /*!
  * jQuery JavaScript Library v2.1.1
  * http://jquery.com/
@@ -11144,7 +12468,7 @@ return jQuery;
 
 }));
 
-},{}],11:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function (global){
 //! moment.js
 //! version : 2.8.4
@@ -14084,7 +15408,7 @@ return jQuery;
 }).call(this);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],12:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 //     Underscore.js 1.7.0
 //     http://underscorejs.org
 //     (c) 2009-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -15501,7 +16825,7 @@ return jQuery;
   }
 }.call(this));
 
-},{}],13:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 var Streamer = require('./lib/streamer');
 var Recorder = require('./lib/recorder');
 
@@ -15543,7 +16867,7 @@ module.exports = function (config) {
   };
 };
 
-},{"./lib/recorder":15,"./lib/streamer":16}],14:[function(require,module,exports){
+},{"./lib/recorder":17,"./lib/streamer":18}],16:[function(require,module,exports){
 module.exports = function(msg) {
   var debugMsg = document.getElementById('debug-msg');
   if (debugMsg) {
@@ -15551,7 +16875,7 @@ module.exports = function(msg) {
   }
 };
 
-},{}],15:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 var debug = require('./debug');
 var defaults = require('lodash.defaults');
 
@@ -15609,7 +16933,7 @@ module.exports = function (options) {
   };
 };
 
-},{"./debug":14,"lodash.defaults":17}],16:[function(require,module,exports){
+},{"./debug":16,"lodash.defaults":19}],18:[function(require,module,exports){
 var defaults = require('lodash.defaults');
 
 var setUrl = function () {
@@ -15722,7 +17046,7 @@ module.exports = function (options) {
   };
 };
 
-},{"lodash.defaults":17}],17:[function(require,module,exports){
+},{"lodash.defaults":19}],19:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -15778,7 +17102,7 @@ var defaults = function(object, source, guard) {
 
 module.exports = defaults;
 
-},{"lodash._objecttypes":18,"lodash.keys":19}],18:[function(require,module,exports){
+},{"lodash._objecttypes":20,"lodash.keys":21}],20:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -15800,7 +17124,7 @@ var objectTypes = {
 
 module.exports = objectTypes;
 
-},{}],19:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -15838,7 +17162,7 @@ var keys = !nativeKeys ? shimKeys : function(object) {
 
 module.exports = keys;
 
-},{"lodash._isnative":20,"lodash._shimkeys":21,"lodash.isobject":22}],20:[function(require,module,exports){
+},{"lodash._isnative":22,"lodash._shimkeys":23,"lodash.isobject":24}],22:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -15874,7 +17198,7 @@ function isNative(value) {
 
 module.exports = isNative;
 
-},{}],21:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -15914,7 +17238,7 @@ var shimKeys = function(object) {
 
 module.exports = shimKeys;
 
-},{"lodash._objecttypes":18}],22:[function(require,module,exports){
+},{"lodash._objecttypes":20}],24:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -15955,13 +17279,489 @@ function isObject(value) {
 
 module.exports = isObject;
 
-},{"lodash._objecttypes":18}],23:[function(require,module,exports){
+},{"lodash._objecttypes":20}],25:[function(require,module,exports){
+(function (process,global){
+/*
+	var vid = new Whammy.Video();
+	vid.add(canvas or data url)
+	vid.compile()
+*/
+
+global.Whammy = (function(){
+	// in this case, frames has a very specific meaning, which will be 
+	// detailed once i finish writing the code
+
+	function toWebM(frames, outputAsArray){
+		var info = checkFrames(frames);
+
+		//max duration by cluster in milliseconds
+		var CLUSTER_MAX_DURATION = 30000;
+		
+		var EBML = [
+			{
+				"id": 0x1a45dfa3, // EBML
+				"data": [
+					{ 
+						"data": 1,
+						"id": 0x4286 // EBMLVersion
+					},
+					{ 
+						"data": 1,
+						"id": 0x42f7 // EBMLReadVersion
+					},
+					{ 
+						"data": 4,
+						"id": 0x42f2 // EBMLMaxIDLength
+					},
+					{ 
+						"data": 8,
+						"id": 0x42f3 // EBMLMaxSizeLength
+					},
+					{ 
+						"data": "webm",
+						"id": 0x4282 // DocType
+					},
+					{ 
+						"data": 2,
+						"id": 0x4287 // DocTypeVersion
+					},
+					{ 
+						"data": 2,
+						"id": 0x4285 // DocTypeReadVersion
+					}
+				]
+			},
+			{
+				"id": 0x18538067, // Segment
+				"data": [
+					{ 
+						"id": 0x1549a966, // Info
+						"data": [
+							{  
+								"data": 1e6, //do things in millisecs (num of nanosecs for duration scale)
+								"id": 0x2ad7b1 // TimecodeScale
+							},
+							{ 
+								"data": "whammy",
+								"id": 0x4d80 // MuxingApp
+							},
+							{ 
+								"data": "whammy",
+								"id": 0x5741 // WritingApp
+							},
+							{ 
+								"data": doubleToString(info.duration),
+								"id": 0x4489 // Duration
+							}
+						]
+					},
+					{
+						"id": 0x1654ae6b, // Tracks
+						"data": [
+							{
+								"id": 0xae, // TrackEntry
+								"data": [
+									{  
+										"data": 1,
+										"id": 0xd7 // TrackNumber
+									},
+									{ 
+										"data": 1,
+										"id": 0x63c5 // TrackUID
+									},
+									{ 
+										"data": 0,
+										"id": 0x9c // FlagLacing
+									},
+									{ 
+										"data": "und",
+										"id": 0x22b59c // Language
+									},
+									{ 
+										"data": "V_VP8",
+										"id": 0x86 // CodecID
+									},
+									{ 
+										"data": "VP8",
+										"id": 0x258688 // CodecName
+									},
+									{ 
+										"data": 1,
+										"id": 0x83 // TrackType
+									},
+									{
+										"id": 0xe0,  // Video
+										"data": [
+											{
+												"data": info.width,
+												"id": 0xb0 // PixelWidth
+											},
+											{ 
+												"data": info.height,
+												"id": 0xba // PixelHeight
+											}
+										]
+									}
+								]
+							}
+						]
+					},
+
+					//cluster insertion point
+				]
+			}
+		 ];
+
+						
+		//Generate clusters (max duration)
+		var frameNumber = 0;
+		var clusterTimecode = 0;
+		while(frameNumber < frames.length){
+			
+			var clusterFrames = [];
+			var clusterDuration = 0;
+			do {
+				clusterFrames.push(frames[frameNumber]);
+				clusterDuration += frames[frameNumber].duration;
+				frameNumber++;				
+			}while(frameNumber < frames.length && clusterDuration < CLUSTER_MAX_DURATION);
+						
+			var clusterCounter = 0;			
+			var cluster = {
+					"id": 0x1f43b675, // Cluster
+					"data": [
+						{  
+							"data": clusterTimecode,
+							"id": 0xe7 // Timecode
+						}
+					].concat(clusterFrames.map(function(webp){
+						var block = makeSimpleBlock({
+							discardable: 0,
+							frame: webp.data.slice(4),
+							invisible: 0,
+							keyframe: 1,
+							lacing: 0,
+							trackNum: 1,
+							timecode: Math.round(clusterCounter)
+						});
+						clusterCounter += webp.duration;
+						return {
+							data: block,
+							id: 0xa3
+						};
+					}))
+				}
+			
+			//Add cluster to segment
+			EBML[1].data.push(cluster);			
+			clusterTimecode += clusterDuration;
+		}
+						
+		return generateEBML(EBML, outputAsArray)
+	}
+
+	// sums the lengths of all the frames and gets the duration, woo
+
+	function checkFrames(frames){
+		var width = frames[0].width, 
+			height = frames[0].height, 
+			duration = frames[0].duration;
+		for(var i = 1; i < frames.length; i++){
+			if(frames[i].width != width) throw "Frame " + (i + 1) + " has a different width";
+			if(frames[i].height != height) throw "Frame " + (i + 1) + " has a different height";
+			if(frames[i].duration < 0 || frames[i].duration > 0x7fff) throw "Frame " + (i + 1) + " has a weird duration (must be between 0 and 32767)";
+			duration += frames[i].duration;
+		}
+		return {
+			duration: duration,
+			width: width,
+			height: height
+		};
+	}
+
+
+	function numToBuffer(num){
+		var parts = [];
+		while(num > 0){
+			parts.push(num & 0xff)
+			num = num >> 8
+		}
+		return new Uint8Array(parts.reverse());
+	}
+
+	function strToBuffer(str){
+		// return new Blob([str]);
+
+		var arr = new Uint8Array(str.length);
+		for(var i = 0; i < str.length; i++){
+			arr[i] = str.charCodeAt(i)
+		}
+		return arr;
+		// this is slower
+		// return new Uint8Array(str.split('').map(function(e){
+		// 	return e.charCodeAt(0)
+		// }))
+	}
+
+
+	//sorry this is ugly, and sort of hard to understand exactly why this was done
+	// at all really, but the reason is that there's some code below that i dont really
+	// feel like understanding, and this is easier than using my brain.
+
+	function bitsToBuffer(bits){
+		var data = [];
+		var pad = (bits.length % 8) ? (new Array(1 + 8 - (bits.length % 8))).join('0') : '';
+		bits = pad + bits;
+		for(var i = 0; i < bits.length; i+= 8){
+			data.push(parseInt(bits.substr(i,8),2))
+		}
+		return new Uint8Array(data);
+	}
+
+	function generateEBML(json, outputAsArray){
+		var ebml = [];
+		for(var i = 0; i < json.length; i++){
+			var data = json[i].data;
+			if(typeof data == 'object') data = generateEBML(data, outputAsArray);					
+			if(typeof data == 'number') data = bitsToBuffer(data.toString(2));
+			if(typeof data == 'string') data = strToBuffer(data);
+
+			if(data.length){
+				var z = z;
+			}
+			
+			var len = data.size || data.byteLength || data.length;
+			var zeroes = Math.ceil(Math.ceil(Math.log(len)/Math.log(2))/8);
+			var size_str = len.toString(2);
+			var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
+			var size = (new Array(zeroes)).join('0') + '1' + padded;
+			
+			//i actually dont quite understand what went on up there, so I'm not really
+			//going to fix this, i'm probably just going to write some hacky thing which
+			//converts that string into a buffer-esque thing
+
+			ebml.push(numToBuffer(json[i].id));
+			ebml.push(bitsToBuffer(size));
+			ebml.push(data)
+			
+
+		}
+		
+		//output as blob or byteArray
+		if(outputAsArray){
+			//convert ebml to an array
+			var buffer = toFlatArray(ebml)
+			return new Uint8Array(buffer);
+		}else{
+			return new Blob(ebml, {type: "video/webm"});
+		}
+	}
+	
+	function toFlatArray(arr, outBuffer){
+		if(outBuffer == null){
+			outBuffer = [];
+		}
+		for(var i = 0; i < arr.length; i++){
+			if(typeof arr[i] == 'object'){
+				//an array
+				toFlatArray(arr[i], outBuffer)
+			}else{
+				//a simple element
+				outBuffer.push(arr[i]);
+			}
+		}
+		return outBuffer;
+	}
+	
+	//OKAY, so the following two functions are the string-based old stuff, the reason they're
+	//still sort of in here, is that they're actually faster than the new blob stuff because
+	//getAsFile isn't widely implemented, or at least, it doesn't work in chrome, which is the
+	// only browser which supports get as webp
+
+	//Converting between a string of 0010101001's and binary back and forth is probably inefficient
+	//TODO: get rid of this function
+	function toBinStr_old(bits){
+		var data = '';
+		var pad = (bits.length % 8) ? (new Array(1 + 8 - (bits.length % 8))).join('0') : '';
+		bits = pad + bits;
+		for(var i = 0; i < bits.length; i+= 8){
+			data += String.fromCharCode(parseInt(bits.substr(i,8),2))
+		}
+		return data;
+	}
+
+	function generateEBML_old(json){
+		var ebml = '';
+		for(var i = 0; i < json.length; i++){
+			var data = json[i].data;
+			if(typeof data == 'object') data = generateEBML_old(data);
+			if(typeof data == 'number') data = toBinStr_old(data.toString(2));
+			
+			var len = data.length;
+			var zeroes = Math.ceil(Math.ceil(Math.log(len)/Math.log(2))/8);
+			var size_str = len.toString(2);
+			var padded = (new Array((zeroes * 7 + 7 + 1) - size_str.length)).join('0') + size_str;
+			var size = (new Array(zeroes)).join('0') + '1' + padded;
+
+			ebml += toBinStr_old(json[i].id.toString(2)) + toBinStr_old(size) + data;
+
+		}
+		return ebml;
+	}
+
+	//woot, a function that's actually written for this project!
+	//this parses some json markup and makes it into that binary magic
+	//which can then get shoved into the matroska comtainer (peaceably)
+
+	function makeSimpleBlock(data){
+		var flags = 0;
+		if (data.keyframe) flags |= 128;
+		if (data.invisible) flags |= 8;
+		if (data.lacing) flags |= (data.lacing << 1);
+		if (data.discardable) flags |= 1;
+		if (data.trackNum > 127) {
+			throw "TrackNumber > 127 not supported";
+		}
+		var out = [data.trackNum | 0x80, data.timecode >> 8, data.timecode & 0xff, flags].map(function(e){
+			return String.fromCharCode(e)
+		}).join('') + data.frame;
+
+		return out;
+	}
+
+	// here's something else taken verbatim from weppy, awesome rite?
+
+	function parseWebP(riff){
+		var VP8 = riff.RIFF[0].WEBP[0];
+		
+		var frame_start = VP8.indexOf('\x9d\x01\x2a'); //A VP8 keyframe starts with the 0x9d012a header
+		for(var i = 0, c = []; i < 4; i++) c[i] = VP8.charCodeAt(frame_start + 3 + i);
+		
+		var width, horizontal_scale, height, vertical_scale, tmp;
+		
+		//the code below is literally copied verbatim from the bitstream spec
+		tmp = (c[1] << 8) | c[0];
+		width = tmp & 0x3FFF;
+		horizontal_scale = tmp >> 14;
+		tmp = (c[3] << 8) | c[2];
+		height = tmp & 0x3FFF;
+		vertical_scale = tmp >> 14;
+		return {
+			width: width,
+			height: height,
+			data: VP8,
+			riff: riff
+		}
+	}
+
+	// i think i'm going off on a riff by pretending this is some known
+	// idiom which i'm making a casual and brilliant pun about, but since
+	// i can't find anything on google which conforms to this idiomatic
+	// usage, I'm assuming this is just a consequence of some psychotic
+	// break which makes me make up puns. well, enough riff-raff (aha a
+	// rescue of sorts), this function was ripped wholesale from weppy
+
+	function parseRIFF(string){
+		var offset = 0;
+		var chunks = {};
+		
+		while (offset < string.length) {
+			var id = string.substr(offset, 4);
+			var len = parseInt(string.substr(offset + 4, 4).split('').map(function(i){
+				var unpadded = i.charCodeAt(0).toString(2);
+				return (new Array(8 - unpadded.length + 1)).join('0') + unpadded
+			}).join(''),2);
+			var data = string.substr(offset + 4 + 4, len);
+			offset += 4 + 4 + len;
+			chunks[id] = chunks[id] || [];
+			
+			if (id == 'RIFF' || id == 'LIST') {
+				chunks[id].push(parseRIFF(data));
+			} else {
+				chunks[id].push(data);
+			}
+		}
+		return chunks;
+	}
+
+	// here's a little utility function that acts as a utility for other functions
+	// basically, the only purpose is for encoding "Duration", which is encoded as
+	// a double (considerably more difficult to encode than an integer)
+	function doubleToString(num){
+		return [].slice.call(
+			new Uint8Array(
+				(
+					new Float64Array([num]) //create a float64 array
+				).buffer) //extract the array buffer
+			, 0) // convert the Uint8Array into a regular array
+			.map(function(e){ //since it's a regular array, we can now use map
+				return String.fromCharCode(e) // encode all the bytes individually
+			})
+			.reverse() //correct the byte endianness (assume it's little endian for now)
+			.join('') // join the bytes in holy matrimony as a string
+	}
+
+	function WhammyVideo(speed, quality){ // a more abstract-ish API
+		this.frames = [];
+		this.duration = 1000 / speed;
+		this.quality = quality || 0.8;
+	}
+
+	WhammyVideo.prototype.add = function(frame, duration){
+		if(typeof duration != 'undefined' && this.duration) throw "you can't pass a duration if the fps is set";
+		if(typeof duration == 'undefined' && !this.duration) throw "if you don't have the fps set, you ned to have durations here."
+		if('canvas' in frame){ //CanvasRenderingContext2D
+			frame = frame.canvas;	
+		}
+		if('toDataURL' in frame){
+			frame = frame.toDataURL('image/webp', this.quality)
+		}else if(typeof frame != "string"){
+			throw "frame must be a a HTMLCanvasElement, a CanvasRenderingContext2D or a DataURI formatted string"
+		}
+		if (!(/^data:image\/webp;base64,/ig).test(frame)) {
+			throw "Input must be formatted properly as a base64 encoded DataURI of type image/webp";
+		}
+		this.frames.push({
+			image: frame,
+			duration: duration || this.duration
+		})
+	}
+	
+	WhammyVideo.prototype.compile = function(outputAsArray){
+		return new toWebM(this.frames.map(function(frame){
+			var webp = parseWebP(parseRIFF(atob(frame.image.slice(23))));
+			webp.duration = frame.duration;
+			return webp;
+		}), outputAsArray)
+	}
+
+	return {
+		Video: WhammyVideo,
+		fromImageArray: function(images, fps, outputAsArray){
+			return toWebM(images.map(function(image){
+				var webp = parseWebP(parseRIFF(atob(image.slice(23))))
+				webp.duration = 1000 / fps;
+				return webp;
+			}), outputAsArray)
+		},
+		toWebM: toWebM
+		// expose methods of madness
+	}
+})();
+
+if (typeof process !== 'undefined') module.exports = Whammy;
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"_process":11}],26:[function(require,module,exports){
 module.exports = "<h3>make a post</h3>\n\n<div class=\"post-stuff\">\n\t<div id=\"video-preview\"></div>\n\t<textarea placeholder=\"say something nice\"></textarea>\n</div>\n\n\n\n<div class=\"controls\">\n\t<a href=\"javascript:;\" class=\"ok pure-button pure-button-primary\">\n\t\tdone\n\t</a>\n\n\t<a href=\"javascript:;\" class=\"nvm pure-button\">\n\t\tnevermind\n\t</a>\n</div>";
 
-},{}],24:[function(require,module,exports){
-module.exports = "\n<% if(!hasView('makePost')) { %>\n\t<a href=\"javascript:;\" class=\"make-post-button pure-button pure-button-primary\">\n\t\tNew Post\n\t</a>\n<% } %>\n\n\n<div id=\"make-root-post\" class=\"make-post\">\n\n</div>\n\n<ul class=\"roots\">\n\t<% posts.each(function(post) { %>\n\t\t<li class=\"root\">\n\t\t\t<%- post.get('key') %>\n\t\t\t<%- post.get('data') %>\n\t\t</li>\n\n\t<% }); %>\n</ul>\n";
+},{}],27:[function(require,module,exports){
+module.exports = "\n\n<% if(parent.get('data')) { %>\n\t<div class=\"post parent-post\">\n\t\t<video src=\"<%- parent.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t<div class=\"post-title\">\n\t\t\t<p><%- parent.get('data').text %></p>\n\t\t</div>\n\t</div>\n<% } %>\n\n<div class=\"post-controls controls-min\">\n\t<% if(!hasView('makePost')) { %>\n\t\t<a href=\"javascript:;\" class=\"make-post-button\">\n\t\t\tNew Post\n\t\t</a>\n\t<% } %>\n</div>\n\n<div id=\"make-<%- parentPost %>-post\" class=\"make-post\"></div>\n\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<div id=\"sub-<%- post.get('key') %>-posts\"></div>\n\t<% }); %>\n</ul>\n";
 
-},{}],25:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
+module.exports = "\n<% if(!hasView('makePost')) { %>\n\t<a href=\"javascript:;\" class=\"make-post-button make-root-post pure-button pure-button-primary\">\n\t\tNew Post\n\t</a>\n<% } %>\n\n\n<div id=\"make-root-post\" class=\"make-post\">\n\n</div>\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<li class=\"post\">\n\n\t\t\t<video src=\"<%- post.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t\t<div class=\"post-title\">\n\t\t\t\t<a href=\"#post/<%- post.get('key') %>\">\n\t\t\t\t\t<%- post.get('data').text %>\n\t\t\t\t</a>\n\t\t\t</div>\n\n\t\t</li>\n\n\t<% }); %>\n</ul>\n";
+
+},{}],29:[function(require,module,exports){
 module.exports = "";
 
 },{}]},{},[1]);

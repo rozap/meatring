@@ -1,1 +1,27 @@
-post
+
+
+<% if(parent.get('data')) { %>
+	<div class="post parent-post">
+		<video src="<%- parent.get('data').video %>" autoplay="autoplay" loop />
+		<div class="post-title">
+			<p><%- parent.get('data').text %></p>
+		</div>
+	</div>
+<% } %>
+
+<div class="post-controls controls-min">
+	<% if(!hasView('makePost')) { %>
+		<a href="javascript:;" class="make-post-button">
+			New Post
+		</a>
+	<% } %>
+</div>
+
+<div id="make-<%- parentPost %>-post" class="make-post"></div>
+
+
+<ul class="posts">
+	<% posts.each(function(post) { %>
+		<div id="sub-<%- post.get('key') %>-posts"></div>
+	<% }); %>
+</ul>

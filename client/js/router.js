@@ -20,11 +20,11 @@ module.exports = Backbone.Router.extend({
 
 	},
 
-	_create: function(View) {
+	_create: function(View, opts) {
 		if (this._view) this._view.end();
-		this._view = new View({
+		this._view = new View(_.extend({
 			app: this.app
-		});
+		}, opts));
 		this._view.onStart();
 	},
 
@@ -33,9 +33,11 @@ module.exports = Backbone.Router.extend({
 		this._create(Roots);
 	},
 
-	post: function() {
+	post: function(parentPost) {
 		console.log("post");
-		this._create(Post)
+		this._create(Post, {
+			parentPost : parentPost
+		})
 	}
 
 });
