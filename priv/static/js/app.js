@@ -8,7 +8,7 @@ $(document).ready(function( ){
 	new Router();
 })
 
-},{"./router":4,"backbone":10,"jquery":12}],2:[function(require,module,exports){
+},{"./router":4,"backbone":11,"jquery":13}],2:[function(require,module,exports){
 var Backbone = require('backbone');
 
 module.exports = Backbone.Collection.extend({
@@ -23,7 +23,7 @@ module.exports = Backbone.Collection.extend({
 		return '/api/search/' + this._parent;
 	}
 });
-},{"backbone":10}],3:[function(require,module,exports){
+},{"backbone":11}],3:[function(require,module,exports){
 var Backbone = require('backbone');
 
 module.exports = Backbone.Model.extend({
@@ -40,7 +40,7 @@ module.exports = Backbone.Model.extend({
     }
 
 });
-},{"backbone":10}],4:[function(require,module,exports){
+},{"backbone":11}],4:[function(require,module,exports){
 var _ = require('underscore');
 var Backbone = require('backbone');
 
@@ -57,7 +57,8 @@ module.exports = Backbone.Router.extend({
 
 	initialize: function(opts) {
 		this.app = {
-			dispatcher: _.clone(Backbone.Events)
+			dispatcher: _.clone(Backbone.Events),
+			router: this
 		};
 		Backbone.history.start();
 
@@ -84,7 +85,7 @@ module.exports = Backbone.Router.extend({
 	}
 
 });
-},{"./views/post":6,"./views/roots":7,"backbone":10,"underscore":14}],5:[function(require,module,exports){
+},{"./views/post":6,"./views/roots":8,"backbone":11,"underscore":15}],5:[function(require,module,exports){
 var _ = require('underscore');
 var View = require('./view');
 var MakePostTemplate = require('../../templates/make-post.html');
@@ -93,20 +94,17 @@ var Webrtc2images = require('webrtc2images');
 var Whammy = require('whammy');
 var Post = require('../models/post');
 var async = require('async');
+var ProgressView = require('./progress');
 
 module.exports = View.extend({
 
     template: _.template(MakePostTemplate),
 
-    events: {
-        'click .ok': 'submitPost',
-        'click .nvm': 'end'
-    },
 
     _width: 160,
     _height: 120,
     _frames: 30,
-    _interval: 120,
+    _interval: 180,
 
 
 
@@ -138,10 +136,20 @@ module.exports = View.extend({
             }
         });
 
+        var view = this.spawn('progressView', new ProgressView({
+            app: this.app,
+            el: this.$el.find('.controls-view')
+        }));
+        // this.listenTo(view, 'end', );
+
+
     },
 
     _onSuccess: function(res) {
         console.log(res);
+        this.app.router.navigate('post/' + res, {
+            trigger: true
+        });
     },
 
     _onError: function() {
@@ -159,7 +167,7 @@ module.exports = View.extend({
             meta: {
                 parentPost: this.parentPost
             }
-        }).save().then(this._onSuccess, this._onError);
+        }).save().then(this._onSuccess.bind(this), this._onError.bind(this));
     },
 
     _framesToWebm: function(frames) {
@@ -172,11 +180,12 @@ module.exports = View.extend({
 
         async.mapSeries(frames, function(frame, cb) {
             var ctx = can.getContext('2d');
+            this.getView('progressView').add(50 / this._frames, 'encoding');
+
             image.onload = function() {
                 ctx.drawImage(image, 0, 0, this._width, this._height)
-
+                console.log("added frame..")
                 encoder.add(ctx);
-
                 cb();
             }.bind(this);
             image.src = frame;
@@ -194,7 +203,20 @@ module.exports = View.extend({
     },
 
 
+    showRecordProgress: function() {
+        var update = function() {
+            if(!this.getView('progressView')) return;
+            this.getView('progressView').add(50 / this._frames, 'recording');
+            setTimeout(update, this._interval);
+        }.bind(this);
+
+        setTimeout(update, this._interval)
+
+    },
+
+
     submitPost: function() {
+        this.showRecordProgress();
         this.rtc2images.recordVideo(function(err, frames) {
             if (err) {
                 console.log(err);
@@ -209,7 +231,7 @@ module.exports = View.extend({
 
 
 });
-},{"../../templates/make-post.html":26,"../models/post":3,"./make-post":5,"./view":8,"async":9,"underscore":14,"webrtc2images":15,"whammy":25}],6:[function(require,module,exports){
+},{"../../templates/make-post.html":27,"../models/post":3,"./make-post":5,"./progress":7,"./view":9,"async":10,"underscore":15,"webrtc2images":16,"whammy":26}],6:[function(require,module,exports){
 var _ = require('underscore');
 var View = require('./view');
 var Roots = require('./roots');
@@ -242,6 +264,7 @@ var ParentPostView = SubPostView.extend({
 
 
     onStart: function() {
+        this.delegateMakePostEvents();
         this.parent = new Post({
             key: this.parentPost
         });
@@ -256,7 +279,47 @@ var ParentPostView = SubPostView.extend({
 
 
 module.exports = ParentPostView;
-},{"../../templates/post.html":27,"../models/post":3,"./roots":7,"./view":8,"underscore":14}],7:[function(require,module,exports){
+},{"../../templates/post.html":28,"../models/post":3,"./roots":8,"./view":9,"underscore":15}],7:[function(require,module,exports){
+var _ = require('underscore');
+var View = require('./view');
+var ProgressTemplate = require('../../templates/progress.html');
+
+module.exports = View.extend({
+    template: _.template(ProgressTemplate),
+    include: ['prog', 'isInProgress', 'state'],
+
+    events: {
+        'click .ok': 'submitPost',
+        'click .nvm': 'end'
+    },
+
+    _isInProgress: false,
+    
+    prog: 5,
+
+    onStart: function() {
+        // console.log(this.template);
+        this.render();
+    },
+
+    add : function(d, state) {
+        this.state = state;
+        this.set('prog', Math.min(this.prog + d, 100));
+    },
+
+    submitPost: function() {
+        this._isInProgress = true;
+        this.render();
+        console.log("submit..")
+        this._parentView.submitPost();
+    },
+
+    isInProgress:function() {
+        return this._isInProgress;
+    }
+
+});
+},{"../../templates/progress.html":29,"./view":9,"underscore":15}],8:[function(require,module,exports){
 var _ = require('underscore');
 var View = require('./view');
 var IndexTemplate = require('../../templates/roots.html');
@@ -270,22 +333,27 @@ module.exports = View.extend({
 
     include: ['posts'],
 
-    events: {
-        'click .make-post-button': 'makePost'
-    },
+
 
     parentPost: 'root',
 
 
     onStart: function() {
-
+        this.delegateMakePostEvents();
         this.posts = new Posts([], {
             parentPost: this.parentPost
         });
         this.render();
-
         this.listenTo(this.posts, 'sync', this.onFetched);
         this.posts.fetch();
+    },
+
+
+    delegateMakePostEvents: function() {
+        var events = {};
+        var ev = 'click #make-' + this.parentPost + '-post-button';
+        events[ev] = 'makePost';
+        this.delegateEvents(events);
     },
 
     onFetched: function() {
@@ -299,13 +367,12 @@ module.exports = View.extend({
             el: '#make-' + this.parentPost + '-post',
             parentPost: this.parentPost
         }));
-        this.render();
     }
 
 
 
 });
-},{"../../templates/roots.html":28,"../collections/posts":2,"./make-post":5,"./view":8,"underscore":14}],8:[function(require,module,exports){
+},{"../../templates/roots.html":30,"../collections/posts":2,"./make-post":5,"./view":9,"underscore":15}],9:[function(require,module,exports){
 var Backbone = require('backbone'),
     _ = require('underscore'),
     $ = require('jquery'),
@@ -417,7 +484,7 @@ module.exports = Backbone.View.extend({
         if (this._views[name]) this._views[name].end();
         this._views[name] = view;
         this.listenToOnce(view, 'end', _.partial(this._removeView, name).bind(this));
-        this.listenToOnce(view, 'end', this.renderIt);
+        view._parentView = this;
         view.onStart(this);
         return view;
     },
@@ -451,7 +518,7 @@ module.exports = Backbone.View.extend({
     }
 
 });
-},{"../../templates/util/error.html":29,"backbone":10,"jquery":12,"moment":13,"underscore":14}],9:[function(require,module,exports){
+},{"../../templates/util/error.html":31,"backbone":11,"jquery":13,"moment":14,"underscore":15}],10:[function(require,module,exports){
 (function (process){
 /*!
  * async
@@ -1578,7 +1645,7 @@ module.exports = Backbone.View.extend({
 }());
 
 }).call(this,require('_process'))
-},{"_process":11}],10:[function(require,module,exports){
+},{"_process":12}],11:[function(require,module,exports){
 //     Backbone.js 1.1.2
 
 //     (c) 2010-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -3188,7 +3255,7 @@ module.exports = Backbone.View.extend({
 
 }));
 
-},{"underscore":14}],11:[function(require,module,exports){
+},{"underscore":15}],12:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -3276,7 +3343,7 @@ process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 /*!
  * jQuery JavaScript Library v2.1.1
  * http://jquery.com/
@@ -12468,7 +12535,7 @@ return jQuery;
 
 }));
 
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 (function (global){
 //! moment.js
 //! version : 2.8.4
@@ -15408,7 +15475,7 @@ return jQuery;
 }).call(this);
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 //     Underscore.js 1.7.0
 //     http://underscorejs.org
 //     (c) 2009-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
@@ -16825,7 +16892,7 @@ return jQuery;
   }
 }.call(this));
 
-},{}],15:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 var Streamer = require('./lib/streamer');
 var Recorder = require('./lib/recorder');
 
@@ -16867,7 +16934,7 @@ module.exports = function (config) {
   };
 };
 
-},{"./lib/recorder":17,"./lib/streamer":18}],16:[function(require,module,exports){
+},{"./lib/recorder":18,"./lib/streamer":19}],17:[function(require,module,exports){
 module.exports = function(msg) {
   var debugMsg = document.getElementById('debug-msg');
   if (debugMsg) {
@@ -16875,7 +16942,7 @@ module.exports = function(msg) {
   }
 };
 
-},{}],17:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 var debug = require('./debug');
 var defaults = require('lodash.defaults');
 
@@ -16933,7 +17000,7 @@ module.exports = function (options) {
   };
 };
 
-},{"./debug":16,"lodash.defaults":19}],18:[function(require,module,exports){
+},{"./debug":17,"lodash.defaults":20}],19:[function(require,module,exports){
 var defaults = require('lodash.defaults');
 
 var setUrl = function () {
@@ -17046,7 +17113,7 @@ module.exports = function (options) {
   };
 };
 
-},{"lodash.defaults":19}],19:[function(require,module,exports){
+},{"lodash.defaults":20}],20:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -17102,7 +17169,7 @@ var defaults = function(object, source, guard) {
 
 module.exports = defaults;
 
-},{"lodash._objecttypes":20,"lodash.keys":21}],20:[function(require,module,exports){
+},{"lodash._objecttypes":21,"lodash.keys":22}],21:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -17124,7 +17191,7 @@ var objectTypes = {
 
 module.exports = objectTypes;
 
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -17162,7 +17229,7 @@ var keys = !nativeKeys ? shimKeys : function(object) {
 
 module.exports = keys;
 
-},{"lodash._isnative":22,"lodash._shimkeys":23,"lodash.isobject":24}],22:[function(require,module,exports){
+},{"lodash._isnative":23,"lodash._shimkeys":24,"lodash.isobject":25}],23:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -17198,7 +17265,7 @@ function isNative(value) {
 
 module.exports = isNative;
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -17238,7 +17305,7 @@ var shimKeys = function(object) {
 
 module.exports = shimKeys;
 
-},{"lodash._objecttypes":20}],24:[function(require,module,exports){
+},{"lodash._objecttypes":21}],25:[function(require,module,exports){
 /**
  * Lo-Dash 2.4.1 (Custom Build) <http://lodash.com/>
  * Build: `lodash modularize modern exports="npm" -o ./npm/`
@@ -17279,7 +17346,7 @@ function isObject(value) {
 
 module.exports = isObject;
 
-},{"lodash._objecttypes":20}],25:[function(require,module,exports){
+},{"lodash._objecttypes":21}],26:[function(require,module,exports){
 (function (process,global){
 /*
 	var vid = new Whammy.Video();
@@ -17752,16 +17819,19 @@ global.Whammy = (function(){
 if (typeof process !== 'undefined') module.exports = Whammy;
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":11}],26:[function(require,module,exports){
-module.exports = "<h3>make a post</h3>\n\n<div class=\"post-stuff\">\n\t<div id=\"video-preview\"></div>\n\t<textarea placeholder=\"say something nice\"></textarea>\n</div>\n\n\n\n<div class=\"controls\">\n\t<a href=\"javascript:;\" class=\"ok pure-button pure-button-primary\">\n\t\tdone\n\t</a>\n\n\t<a href=\"javascript:;\" class=\"nvm pure-button\">\n\t\tnevermind\n\t</a>\n</div>";
-
-},{}],27:[function(require,module,exports){
-module.exports = "\n\n<% if(parent.get('data')) { %>\n\t<div class=\"post parent-post\">\n\t\t<video src=\"<%- parent.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t<div class=\"post-title\">\n\t\t\t<p><%- parent.get('data').text %></p>\n\t\t</div>\n\t</div>\n<% } %>\n\n<div class=\"post-controls controls-min\">\n\t<% if(!hasView('makePost')) { %>\n\t\t<a href=\"javascript:;\" class=\"make-post-button\">\n\t\t\tNew Post\n\t\t</a>\n\t<% } %>\n</div>\n\n<div id=\"make-<%- parentPost %>-post\" class=\"make-post\"></div>\n\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<div id=\"sub-<%- post.get('key') %>-posts\"></div>\n\t<% }); %>\n</ul>\n";
+},{"_process":12}],27:[function(require,module,exports){
+module.exports = "<h3>make a post</h3>\n\n<div class=\"post-stuff\">\n\t<div id=\"video-preview\"></div>\n\t<textarea placeholder=\"say something nice\"></textarea>\n</div>\n\n<div class=\"controls-view\"></div>\n";
 
 },{}],28:[function(require,module,exports){
-module.exports = "\n<% if(!hasView('makePost')) { %>\n\t<a href=\"javascript:;\" class=\"make-post-button make-root-post pure-button pure-button-primary\">\n\t\tNew Post\n\t</a>\n<% } %>\n\n\n<div id=\"make-root-post\" class=\"make-post\">\n\n</div>\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<li class=\"post\">\n\n\t\t\t<video src=\"<%- post.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t\t<div class=\"post-title\">\n\t\t\t\t<a href=\"#post/<%- post.get('key') %>\">\n\t\t\t\t\t<%- post.get('data').text %>\n\t\t\t\t</a>\n\t\t\t</div>\n\n\t\t</li>\n\n\t<% }); %>\n</ul>\n";
+module.exports = "\n\n<% if(parent.get('data')) { %>\n\t<div class=\"post parent-post\">\n\t\t<video src=\"<%- parent.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t<div class=\"post-title\">\n\t\t\t<p><%- parent.get('data').text %></p>\n\t\t</div>\n\t</div>\n<% } %>\n\n<div class=\"post-controls controls-min\">\n\t<% if(!hasView('makePost')) { %>\n\t\t<a href=\"javascript:;\" id=\"make-<%- parentPost %>-post-button\">\n\t\t\tNew Post\n\t\t</a>\n\t<% } %>\n</div>\n\n<div id=\"make-<%- parentPost %>-post\" class=\"make-post\"></div>\n\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<div id=\"sub-<%- post.get('key') %>-posts\"></div>\n\t<% }); %>\n</ul>\n";
 
 },{}],29:[function(require,module,exports){
+module.exports = "<% if(isInProgress()) { %>\n\t<h6><%- state %></h6>\n\t<div class=\"progress\">\n\t\t<div style=\"width: <%- prog %>%\" class=\"progress-inner\">\n\n\t\t</div>\n\t</div>\n<% } else { %> \n\t<div class=\"controls\">\n\t\t<a href=\"javascript:;\" class=\"ok pure-button pure-button-primary\">\n\t\t\tdone\n\t\t</a>\n\n\t\t<a href=\"javascript:;\" class=\"nvm pure-button\">\n\t\t\tnevermind\n\t\t</a>\n\t</div>\n<% } %>\n";
+
+},{}],30:[function(require,module,exports){
+module.exports = "\n<% if(!hasView('makePost')) { %>\n\t<a href=\"javascript:;\" id=\"make-root-post-button\" \n\t\tclass=\"make-root-post pure-button pure-button-primary\">\n\t\tNew Post\n\t</a>\n<% } %>\n\n\n<div id=\"make-root-post\" class=\"make-post\"></div>\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<li class=\"post\">\n\n\t\t\t<video src=\"<%- post.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t\t<div class=\"post-title\">\n\t\t\t\t<a href=\"#post/<%- post.get('key') %>\">\n\t\t\t\t\t<%- post.get('data').text %>\n\t\t\t\t</a>\n\t\t\t</div>\n\n\t\t</li>\n\n\t<% }); %>\n</ul>\n";
+
+},{}],31:[function(require,module,exports){
 module.exports = "";
 
 },{}]},{},[1]);

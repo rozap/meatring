@@ -109,7 +109,7 @@ module.exports = Backbone.View.extend({
         if (this._views[name]) this._views[name].end();
         this._views[name] = view;
         this.listenToOnce(view, 'end', _.partial(this._removeView, name).bind(this));
-        this.listenToOnce(view, 'end', this.renderIt);
+        view._parentView = this;
         view.onStart(this);
         return view;
     },

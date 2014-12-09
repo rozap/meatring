@@ -30,6 +30,7 @@ var ParentPostView = SubPostView.extend({
 
 
     onStart: function() {
+        this.delegateMakePostEvents();
         this.parent = new Post({
             key: this.parentPost
         });

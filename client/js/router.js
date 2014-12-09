@@ -14,7 +14,8 @@ module.exports = Backbone.Router.extend({
 
 	initialize: function(opts) {
 		this.app = {
-			dispatcher: _.clone(Backbone.Events)
+			dispatcher: _.clone(Backbone.Events),
+			router: this
 		};
 		Backbone.history.start();
 

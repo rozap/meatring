@@ -6,20 +6,17 @@ var Webrtc2images = require('webrtc2images');
 var Whammy = require('whammy');
 var Post = require('../models/post');
 var async = require('async');
+var ProgressView = require('./progress');
 
 module.exports = View.extend({
 
     template: _.template(MakePostTemplate),
 
-    events: {
-        'click .ok': 'submitPost',
-        'click .nvm': 'end'
-    },
 
     _width: 160,
     _height: 120,
     _frames: 30,
-    _interval: 120,
+    _interval: 180,
 
 
 
@@ -51,10 +48,20 @@ module.exports = View.extend({
             }
         });
 
+        var view = this.spawn('progressView', new ProgressView({
+            app: this.app,
+            el: this.$el.find('.controls-view')
+        }));
+        // this.listenTo(view, 'end', );
+
+
     },
 
     _onSuccess: function(res) {
         console.log(res);
+        this.app.router.navigate('post/' + res, {
+            trigger: true
+        });
     },
 
     _onError: function() {
@@ -72,7 +79,7 @@ module.exports = View.extend({
             meta: {
                 parentPost: this.parentPost
             }
-        }).save().then(this._onSuccess, this._onError);
+        }).save().then(this._onSuccess.bind(this), this._onError.bind(this));
     },
 
     _framesToWebm: function(frames) {
@@ -85,11 +92,12 @@ module.exports = View.extend({
 
         async.mapSeries(frames, function(frame, cb) {
             var ctx = can.getContext('2d');
+            this.getView('progressView').add(50 / this._frames, 'encoding');
+
             image.onload = function() {
                 ctx.drawImage(image, 0, 0, this._width, this._height)
-
+                console.log("added frame..")
                 encoder.add(ctx);
-
                 cb();
             }.bind(this);
             image.src = frame;
@@ -107,7 +115,20 @@ module.exports = View.extend({
     },
 
 
+    showRecordProgress: function() {
+        var update = function() {
+            if(!this.getView('progressView')) return;
+            this.getView('progressView').add(50 / this._frames, 'recording');
+            setTimeout(update, this._interval);
+        }.bind(this);
+
+        setTimeout(update, this._interval)
+
+    },
+
+
     submitPost: function() {
+        this.showRecordProgress();
         this.rtc2images.recordVideo(function(err, frames) {
             if (err) {
                 console.log(err);

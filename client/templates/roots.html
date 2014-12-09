@@ -1,14 +1,13 @@
 
 <% if(!hasView('makePost')) { %>
-	<a href="javascript:;" class="make-post-button make-root-post pure-button pure-button-primary">
+	<a href="javascript:;" id="make-root-post-button" 
+		class="make-root-post pure-button pure-button-primary">
 		New Post
 	</a>
 <% } %>
 
 
-<div id="make-root-post" class="make-post">
-
-</div>
+<div id="make-root-post" class="make-post"></div>
 
 <ul class="posts">
 	<% posts.each(function(post) { %>
