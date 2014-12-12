@@ -1,10 +1,10 @@
 @import "pure.less";
-@vid-width: 160px;
-@vid-height: 120px;
+@vid-width: 180px;
+@vid-height: 140px;
 @unit: 16px;
 @blue: #3498db;
 @blue2:#2980b9;
-@red1:#e74c3c;
+@red:#e74c3c;
 @red2:#c0392b;
 @light-grey: #bdc3c7;
 @medium-grey: #95a5a6;
@@ -24,6 +24,9 @@ a {
 .head {
 	letter-spacing: .5em;
 	margin-bottom: 2 * @unit;
+}
+h6 {
+	margin: 4px 0px;
 }
 .make-root-post {
 	position: fixed;
@@ -94,4 +97,14 @@ ul.posts {
 		height: @unit;
 		background: @blue;
 	}
+}
+.alert {
+	display: block;
+	padding: @unit/2;
+	margin: @unit 0px;
+	color: white;
+}
+.alert-error {
+	background: @red;
+	border-left: @unit solid @red2;
 }

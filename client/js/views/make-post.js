@@ -11,13 +11,13 @@ var ProgressView = require('./progress');
 module.exports = View.extend({
 
     template: _.template(MakePostTemplate),
-
-
-    _width: 160,
-    _height: 120,
-    _frames: 30,
-    _interval: 180,
-
+    rtcError : false,
+    include : ['rtcError'],
+    _width: 180,
+    _height: 140,
+    _frames: 20,
+    _interval: 200,
+    _fps: 15,
 
 
     onStart: function() {
@@ -26,13 +26,8 @@ module.exports = View.extend({
         this.render();
     },
 
-    fps: function() {
-        //interval can't be less than 100 or weird shit starts happening...UGH
-        // console.log(Math.floor(1000 / this._interval), 'fps');
-        return 20
-    },
-
     post: function() {
+        if(this.rtcError) return;
         this.rtc2images = new Webrtc2images({
             width: this._width,
             height: this._height,
@@ -43,29 +38,30 @@ module.exports = View.extend({
         });
 
         this.rtc2images.startVideo(function(err) {
-            if (err) {
-                console.log(err);
+            if (err && !this.rtcError) {
+                this.set('rtcError', err.message || err.name || err);
+                return;
+            } else if(!err) {
+                this.rtcError = false;
             }
-        });
+        }.bind(this));
 
         var view = this.spawn('progressView', new ProgressView({
             app: this.app,
             el: this.$el.find('.controls-view')
         }));
-        // this.listenTo(view, 'end', );
+        this.listenTo(view, 'end', this.end);
 
 
     },
 
     _onSuccess: function(res) {
-        console.log(res);
         this.app.router.navigate('post/' + res, {
             trigger: true
         });
     },
 
     _onError: function() {
-        console.warn('aw shit');
     },
 
 
@@ -83,7 +79,7 @@ module.exports = View.extend({
     },
 
     _framesToWebm: function(frames) {
-        var encoder = new Whammy.Video(this.fps());
+        var encoder = new Whammy.Video(this._fps);
         var can = document.createElement('canvas');
         var image = new Image(this._width, this._height);
         can.width = this._width;
@@ -95,22 +91,21 @@ module.exports = View.extend({
             this.getView('progressView').add(50 / this._frames, 'encoding');
 
             image.onload = function() {
-                ctx.drawImage(image, 0, 0, this._width, this._height)
-                console.log("added frame..")
+                ctx.drawImage(image, 0, 0, this._width, this._height);
                 encoder.add(ctx);
                 cb();
             }.bind(this);
             image.src = frame;
         }.bind(this), function() {
             var res = encoder.compile();
-            var fr = new FileReader()
+            var fr = new FileReader();
 
             fr.onloadend = function() {
                 this._createPost(fr.result);
 
             }.bind(this);
             fr.readAsDataURL(res);
-        }.bind(this))
+        }.bind(this));
 
     },
 
@@ -122,7 +117,7 @@ module.exports = View.extend({
             setTimeout(update, this._interval);
         }.bind(this);
 
-        setTimeout(update, this._interval)
+        setTimeout(update, this._interval);
 
     },
 
@@ -131,11 +126,9 @@ module.exports = View.extend({
         this.showRecordProgress();
         this.rtc2images.recordVideo(function(err, frames) {
             if (err) {
-                console.log(err);
                 return;
             }
-            console.log(frames);
-            this._framesToWebm(frames)
+            this._framesToWebm(frames);
 
         }.bind(this));
     }

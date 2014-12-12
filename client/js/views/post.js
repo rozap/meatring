@@ -3,12 +3,14 @@ var View = require('./view');
 var Roots = require('./roots');
 var Post = require('../models/post');
 var PostTemplate = require('../../templates/post.html');
+var MakeSubPost = require('./make-sub-post');
 
 
 
 var SubPostView = Roots.extend({
     include: ['parent', 'posts', 'parentPost'],
     template: _.template(PostTemplate),
+    MakePost : MakeSubPost,
 
     onFetched: function() {
         this.render();

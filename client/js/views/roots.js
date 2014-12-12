@@ -2,6 +2,7 @@ var _ = require('underscore');
 var View = require('./view');
 var IndexTemplate = require('../../templates/roots.html');
 var Posts = require('../collections/posts');
+var Post = require('../models/post');
 var MakePost = require('./make-post');
 
 module.exports = View.extend({
@@ -15,6 +16,8 @@ module.exports = View.extend({
 
     parentPost: 'root',
 
+    MakePost: MakePost,
+
 
     onStart: function() {
         this.delegateMakePostEvents();
@@ -24,6 +27,15 @@ module.exports = View.extend({
         this.render();
         this.listenTo(this.posts, 'sync', this.onFetched);
         this.posts.fetch();
+    },
+
+    add: function(key) {
+        var post = new Post({
+            key: key
+        });
+        this.posts.add(post);
+        post.fetch();
+
     },
 
 
@@ -40,7 +52,7 @@ module.exports = View.extend({
 
 
     makePost: function() {
-        this.spawn('makePost', new MakePost({
+        this.spawn('makePost', new this.MakePost({
             app: this.app,
             el: '#make-' + this.parentPost + '-post',
             parentPost: this.parentPost

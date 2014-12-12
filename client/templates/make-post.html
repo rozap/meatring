@@ -5,4 +5,10 @@
 	<textarea placeholder="say something nice"></textarea>
 </div>
 
-<div class="controls-view"></div>
+<% if(rtcError) { %>
+	<div class="alert alert-error">
+		There was an error with webrtc. <%- rtcError %>
+	</div>
+<% } else { %>
+	<div class="controls-view"></div>
+<% } %>
