@@ -99,8 +99,8 @@ var ProgressView = require('./progress');
 module.exports = View.extend({
 
     template: _.template(MakePostTemplate),
-    rtcError : false,
-    include : ['rtcError'],
+    rtcError: false,
+    include: ['rtcError'],
     _width: 180,
     _height: 140,
     _frames: 20,
@@ -115,7 +115,7 @@ module.exports = View.extend({
     },
 
     post: function() {
-        if(this.rtcError) return;
+        if (this.rtcError) return;
         this.rtc2images = new Webrtc2images({
             width: this._width,
             height: this._height,
@@ -129,18 +129,15 @@ module.exports = View.extend({
             if (err && !this.rtcError) {
                 this.set('rtcError', err.message || err.name || err);
                 return;
-            } else if(!err) {
+            } else if (!err) {
                 this.rtcError = false;
+                var view = this.spawn('controlsView', new ProgressView({
+                    app: this.app,
+                    el: this.$el.find('.controls-view')
+                }));
+                this.listenTo(view, 'end', this.end);
             }
         }.bind(this));
-
-        var view = this.spawn('progressView', new ProgressView({
-            app: this.app,
-            el: this.$el.find('.controls-view')
-        }));
-        this.listenTo(view, 'end', this.end);
-
-
     },
 
     _onSuccess: function(res) {
@@ -149,8 +146,7 @@ module.exports = View.extend({
         });
     },
 
-    _onError: function() {
-    },
+    _onError: function() {},
 
 
     _createPost: function(url) {
@@ -176,7 +172,7 @@ module.exports = View.extend({
 
         async.mapSeries(frames, function(frame, cb) {
             var ctx = can.getContext('2d');
-            this.getView('progressView').add(50 / this._frames, 'encoding');
+            this.getView('controlsView').add(50 / this._frames, 'encoding');
 
             image.onload = function() {
                 ctx.drawImage(image, 0, 0, this._width, this._height);
@@ -200,8 +196,8 @@ module.exports = View.extend({
 
     showRecordProgress: function() {
         var update = function() {
-            if(!this.getView('progressView')) return;
-            this.getView('progressView').add(50 / this._frames, 'recording');
+            if (!this.getView('controlsView')) return;
+            this.getView('controlsView').add(50 / this._frames, 'recording');
             setTimeout(update, this._interval);
         }.bind(this);
 
@@ -17837,7 +17833,7 @@ if (typeof process !== 'undefined') module.exports = Whammy;
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"_process":13}],28:[function(require,module,exports){
-module.exports = "<h3>make a post</h3>\n\n<div class=\"post-stuff\">\n\t<div id=\"video-preview\"></div>\n\t<textarea placeholder=\"say something nice\"></textarea>\n</div>\n\n<% if(rtcError) { %>\n\t<div class=\"alert alert-error\">\n\t\tThere was an error with webrtc. <%- rtcError %>\n\t</div>\n<% } else { %>\n\t<div class=\"controls-view\"></div>\n<% } %>\n";
+module.exports = "<h3>make a post</h3>\n\n<div class=\"post-stuff\">\n\t<div id=\"video-preview\"></div>\n\t<textarea placeholder=\"say something nice\"></textarea>\n</div>\n\n<% if(rtcError) { %>\n\t<div class=\"alert alert-error\">\n\t\tThere was an error with webrtc. <%- rtcError %>\n\t</div>\n<% } else { %>\n\t<div class=\"controls-view\">\n\t\t<div class=\"alert alert-success\">\n\t\t\tClick \"allow camera\" at the top of your browser.\n\t\t</div>\n\t</div>\n<% } %>\n";
 
 },{}],29:[function(require,module,exports){
 module.exports = "\n\n<% if(parent.get('data')) { %>\n\t<div class=\"post parent-post\">\n\t\t<video src=\"<%- parent.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t<div class=\"post-title\">\n\t\t\t<p><%- parent.get('data').text %></p>\n\t\t</div>\n\t</div>\n<% } %>\n\n<div class=\"post-controls controls-min\">\n\t<% if(!hasView('makePost')) { %>\n\t\t<a href=\"javascript:;\" id=\"make-<%- parentPost %>-post-button\">\n\t\t\tNew Post\n\t\t</a>\n\t<% } %>\n</div>\n\n<div id=\"make-<%- parentPost %>-post\" class=\"make-post\"></div>\n\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<div id=\"sub-<%- post.get('key') %>-posts\"></div>\n\t<% }); %>\n</ul>\n";

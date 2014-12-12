@@ -46,6 +46,14 @@ h6 {
 			width: ~'calc(100% - ' @vid-width + @unit ~')';
 			min-height: @vid-height;
 		}
+		.video-placeholder {
+			height: @vid-height;
+			width: @vid-width;
+			border: 1px solid @medium-grey;
+			p {
+				text-align: center;
+			}
+		}
 	}
 }
 .controls {
@@ -107,4 +115,8 @@ ul.posts {
 .alert-error {
 	background: @red;
 	border-left: @unit solid @red2;
+}
+.alert-success {
+	background: @blue;
+	border-left: @unit solid @blue2;
 }

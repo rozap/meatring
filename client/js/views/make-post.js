@@ -11,8 +11,8 @@ var ProgressView = require('./progress');
 module.exports = View.extend({
 
     template: _.template(MakePostTemplate),
-    rtcError : false,
-    include : ['rtcError'],
+    rtcError: false,
+    include: ['rtcError'],
     _width: 180,
     _height: 140,
     _frames: 20,
@@ -27,7 +27,7 @@ module.exports = View.extend({
     },
 
     post: function() {
-        if(this.rtcError) return;
+        if (this.rtcError) return;
         this.rtc2images = new Webrtc2images({
             width: this._width,
             height: this._height,
@@ -41,18 +41,15 @@ module.exports = View.extend({
             if (err && !this.rtcError) {
                 this.set('rtcError', err.message || err.name || err);
                 return;
-            } else if(!err) {
+            } else if (!err) {
                 this.rtcError = false;
+                var view = this.spawn('controlsView', new ProgressView({
+                    app: this.app,
+                    el: this.$el.find('.controls-view')
+                }));
+                this.listenTo(view, 'end', this.end);
             }
         }.bind(this));
-
-        var view = this.spawn('progressView', new ProgressView({
-            app: this.app,
-            el: this.$el.find('.controls-view')
-        }));
-        this.listenTo(view, 'end', this.end);
-
-
     },
 
     _onSuccess: function(res) {
@@ -61,8 +58,7 @@ module.exports = View.extend({
         });
     },
 
-    _onError: function() {
-    },
+    _onError: function() {},
 
 
     _createPost: function(url) {
@@ -88,7 +84,7 @@ module.exports = View.extend({
 
         async.mapSeries(frames, function(frame, cb) {
             var ctx = can.getContext('2d');
-            this.getView('progressView').add(50 / this._frames, 'encoding');
+            this.getView('controlsView').add(50 / this._frames, 'encoding');
 
             image.onload = function() {
                 ctx.drawImage(image, 0, 0, this._width, this._height);
@@ -112,8 +108,8 @@ module.exports = View.extend({
 
     showRecordProgress: function() {
         var update = function() {
-            if(!this.getView('progressView')) return;
-            this.getView('progressView').add(50 / this._frames, 'recording');
+            if (!this.getView('controlsView')) return;
+            this.getView('controlsView').add(50 / this._frames, 'recording');
             setTimeout(update, this._interval);
         }.bind(this);
 
