@@ -10,5 +10,5 @@ What you need to do:
   4. run ``` mix meatring.start -b http://your.ip.address:<port> ```
   5. This will give you your own meatring node in the kademlia net. If you point your browser to your.ip.address:8081 you will see the meatring web interface. Note that the 8081 port is configurable via the -b, --bind option. 
   6. ``` mix meatring.start --help ``` when in doubt. 
-  
+  7. this is all highly experimental, half implemented and won't work. 
   
