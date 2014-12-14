@@ -105,11 +105,13 @@ module.exports = Backbone.View.extend({
         this.render();
     },
 
-    spawn: function(name, view) {
+    spawn: function(view, name) {
+        name = name || view._name;
         if (this._views[name]) this._views[name].end();
         this._views[name] = view;
         this.listenToOnce(view, 'end', _.partial(this._removeView, name).bind(this));
         view._parentView = this;
+        this.app.dispatcher.trigger(name + '.start', view);
         view.onStart(this);
         return view;
     },

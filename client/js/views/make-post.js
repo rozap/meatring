@@ -9,7 +9,7 @@ var async = require('async');
 var ProgressView = require('./progress');
 
 module.exports = View.extend({
-
+    _name : 'MakePost',
     template: _.template(MakePostTemplate),
     rtcError: false,
     include: ['rtcError'],
@@ -23,6 +23,7 @@ module.exports = View.extend({
     onStart: function() {
         if (!this.$el) throw new Error("Make post needs an el");
         if (!this.parentPost) throw new Error("what am I making the post on? needs a parent or root if none");
+        this.listenTo(this.app.dispatcher, 'MakePost.start', this.end);
         this.render();
     },
 
@@ -43,7 +44,7 @@ module.exports = View.extend({
                 return;
             } else if (!err) {
                 this.rtcError = false;
-                var view = this.spawn('controlsView', new ProgressView({
+                var view = this.spawn(new ProgressView({
                     app: this.app,
                     el: this.$el.find('.controls-view')
                 }));
@@ -84,7 +85,7 @@ module.exports = View.extend({
 
         async.mapSeries(frames, function(frame, cb) {
             var ctx = can.getContext('2d');
-            this.getView('controlsView').add(50 / this._frames, 'encoding');
+            this.getView('ControlsView').add(50 / this._frames, 'encoding');
 
             image.onload = function() {
                 ctx.drawImage(image, 0, 0, this._width, this._height);
@@ -108,8 +109,8 @@ module.exports = View.extend({
 
     showRecordProgress: function() {
         var update = function() {
-            if (!this.getView('controlsView')) return;
-            this.getView('controlsView').add(50 / this._frames, 'recording');
+            if (!this.getView('ControlsView')) return;
+            this.getView('ControlsView').add(50 / this._frames, 'recording');
             setTimeout(update, this._interval);
         }.bind(this);
 

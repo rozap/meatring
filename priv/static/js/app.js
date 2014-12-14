@@ -97,7 +97,7 @@ var async = require('async');
 var ProgressView = require('./progress');
 
 module.exports = View.extend({
-
+    _name : 'MakePost',
     template: _.template(MakePostTemplate),
     rtcError: false,
     include: ['rtcError'],
@@ -111,6 +111,7 @@ module.exports = View.extend({
     onStart: function() {
         if (!this.$el) throw new Error("Make post needs an el");
         if (!this.parentPost) throw new Error("what am I making the post on? needs a parent or root if none");
+        this.listenTo(this.app.dispatcher, 'MakePost.start', this.end);
         this.render();
     },
 
@@ -131,7 +132,7 @@ module.exports = View.extend({
                 return;
             } else if (!err) {
                 this.rtcError = false;
-                var view = this.spawn('controlsView', new ProgressView({
+                var view = this.spawn(new ProgressView({
                     app: this.app,
                     el: this.$el.find('.controls-view')
                 }));
@@ -172,7 +173,7 @@ module.exports = View.extend({
 
         async.mapSeries(frames, function(frame, cb) {
             var ctx = can.getContext('2d');
-            this.getView('controlsView').add(50 / this._frames, 'encoding');
+            this.getView('ControlsView').add(50 / this._frames, 'encoding');
 
             image.onload = function() {
                 ctx.drawImage(image, 0, 0, this._width, this._height);
@@ -196,8 +197,8 @@ module.exports = View.extend({
 
     showRecordProgress: function() {
         var update = function() {
-            if (!this.getView('controlsView')) return;
-            this.getView('controlsView').add(50 / this._frames, 'recording');
+            if (!this.getView('ControlsView')) return;
+            this.getView('ControlsView').add(50 / this._frames, 'recording');
             setTimeout(update, this._interval);
         }.bind(this);
 
@@ -248,12 +249,12 @@ var SubPostView = Roots.extend({
     onFetched: function() {
         this.render();
         this.posts.each(function(post) {
-            this.spawn('subPost' + post.get('key'), new SubPostView({
+            this.spawn(new SubPostView({
                 app: this.app,
                 parentPost: post.get('key'),
                 parent: post,
                 el: '#sub-' + post.get('key') + '-posts'
-            }));
+            }), 'subPost' + post.get('key'));
         }.bind(this));
     }
 
@@ -286,6 +287,7 @@ var View = require('./view');
 var ProgressTemplate = require('../../templates/progress.html');
 
 module.exports = View.extend({
+    _name : 'ControlsView',
     template: _.template(ProgressTemplate),
     include: ['prog', 'isInProgress', 'state'],
 
@@ -343,11 +345,11 @@ module.exports = View.extend({
 
 
     onStart: function() {
-        this.delegateMakePostEvents();
         this.posts = new Posts([], {
             parentPost: this.parentPost
         });
         this.render();
+        this.delegateMakePostEvents();
         this.listenTo(this.posts, 'sync', this.onFetched);
         this.posts.fetch();
     },
@@ -365,6 +367,7 @@ module.exports = View.extend({
     delegateMakePostEvents: function() {
         var events = {};
         var ev = 'click #make-' + this.parentPost + '-post-button';
+        console.log("delegate", ev);
         events[ev] = 'makePost';
         this.delegateEvents(events);
     },
@@ -375,7 +378,8 @@ module.exports = View.extend({
 
 
     makePost: function() {
-        this.spawn('makePost', new this.MakePost({
+        console.log("make post")
+        this.spawn(new this.MakePost({
             app: this.app,
             el: '#make-' + this.parentPost + '-post',
             parentPost: this.parentPost
@@ -493,11 +497,13 @@ module.exports = Backbone.View.extend({
         this.render();
     },
 
-    spawn: function(name, view) {
+    spawn: function(view, name) {
+        name = name || view._name;
         if (this._views[name]) this._views[name].end();
         this._views[name] = view;
         this.listenToOnce(view, 'end', _.partial(this._removeView, name).bind(this));
         view._parentView = this;
+        this.app.dispatcher.trigger(name + '.start', view);
         view.onStart(this);
         return view;
     },
@@ -17839,7 +17845,7 @@ module.exports = "<h3>make a post</h3>\n\n<div class=\"post-stuff\">\n\t<div id=
 module.exports = "\n\n<% if(parent.get('data')) { %>\n\t<div class=\"post parent-post\">\n\t\t<video src=\"<%- parent.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t<div class=\"post-title\">\n\t\t\t<p><%- parent.get('data').text %></p>\n\t\t</div>\n\t</div>\n<% } %>\n\n<div class=\"post-controls controls-min\">\n\t<% if(!hasView('makePost')) { %>\n\t\t<a href=\"javascript:;\" id=\"make-<%- parentPost %>-post-button\">\n\t\t\tNew Post\n\t\t</a>\n\t<% } %>\n</div>\n\n<div id=\"make-<%- parentPost %>-post\" class=\"make-post\"></div>\n\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<div id=\"sub-<%- post.get('key') %>-posts\"></div>\n\t<% }); %>\n</ul>\n";
 
 },{}],30:[function(require,module,exports){
-module.exports = "<% if(isInProgress()) { %>\n\t<h6><%- state %></h6>\n\t<div class=\"progress\">\n\t\t<div style=\"width: <%- prog %>%\" class=\"progress-inner\">\n\n\t\t</div>\n\t</div>\n<% } else { %> \n\t<div class=\"controls\">\n\t\t<a href=\"javascript:;\" class=\"ok pure-button pure-button-primary\">\n\t\t\tdone\n\t\t</a>\n\n\t\t<a href=\"javascript:;\" class=\"nvm pure-button\">\n\t\t\tnevermind\n\t\t</a>\n\t</div>\n<% } %>\n";
+module.exports = "<% if(isInProgress()) { %>\n\t<h6><%- state %></h6>\n\t<div class=\"progress\">\n\t\t<div style=\"width: <%- prog %>%\" class=\"progress-inner <%- state %>\">\n\n\t\t</div>\n\t</div>\n<% } else { %> \n\t<div class=\"controls\">\n\t\t<a href=\"javascript:;\" class=\"ok pure-button pure-button-primary\">\n\t\t\tdone\n\t\t</a>\n\n\t\t<a href=\"javascript:;\" class=\"nvm pure-button\">\n\t\t\tnevermind\n\t\t</a>\n\t</div>\n<% } %>\n";
 
 },{}],31:[function(require,module,exports){
 module.exports = "\n<% if(!hasView('makePost')) { %>\n\t<a href=\"javascript:;\" id=\"make-root-post-button\" \n\t\tclass=\"make-root-post pure-button pure-button-primary\">\n\t\tNew Post\n\t</a>\n<% } %>\n\n\n<div id=\"make-root-post\" class=\"make-post\"></div>\n\n<ul class=\"posts\">\n\t<% posts.each(function(post) { %>\n\t\t<li class=\"post\">\n\n\t\t\t<video src=\"<%- post.get('data').video %>\" autoplay=\"autoplay\" loop />\n\t\t\t<div class=\"post-title\">\n\t\t\t\t<a href=\"#post/<%- post.get('key') %>\">\n\t\t\t\t\t<%- post.get('data').text %>\n\t\t\t\t</a>\n\t\t\t</div>\n\n\t\t</li>\n\n\t<% }); %>\n</ul>\n";

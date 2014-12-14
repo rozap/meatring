@@ -3,6 +3,7 @@ var View = require('./view');
 var ProgressTemplate = require('../../templates/progress.html');
 
 module.exports = View.extend({
+    _name : 'ControlsView',
     template: _.template(ProgressTemplate),
     include: ['prog', 'isInProgress', 'state'],
 

@@ -15,12 +15,12 @@ var SubPostView = Roots.extend({
     onFetched: function() {
         this.render();
         this.posts.each(function(post) {
-            this.spawn('subPost' + post.get('key'), new SubPostView({
+            this.spawn(new SubPostView({
                 app: this.app,
                 parentPost: post.get('key'),
                 parent: post,
                 el: '#sub-' + post.get('key') + '-posts'
-            }));
+            }), 'subPost' + post.get('key'));
         }.bind(this));
     }
 
