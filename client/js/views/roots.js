@@ -27,6 +27,8 @@ module.exports = View.extend({
         this.delegateMakePostEvents();
         this.listenTo(this.posts, 'sync', this.onFetched);
         this.posts.fetch();
+
+        this.app.dispatcher.trigger('dht', 'watch:' + this.parentPost);
     },
 
     add: function(key) {
@@ -42,7 +44,6 @@ module.exports = View.extend({
     delegateMakePostEvents: function() {
         var events = {};
         var ev = 'click #make-' + this.parentPost + '-post-button';
-        console.log("delegate", ev);
         events[ev] = 'makePost';
         this.delegateEvents(events);
     },

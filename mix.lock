@@ -1,6 +1,6 @@
 %{"cowboy": {:hex, :cowboy, "1.0.0"},
   "cowlib": {:hex, :cowlib, "1.0.0"},
-  "exkad": {:git, "https://github.com/rozap/exkad.git", "070c4d0b5e0508da5029d176534b6d89bfbf29ca", []},
+  "exkad": {:git, "https://github.com/rozap/exkad.git", "653a85649049f81a6dac4deca1d22c99ac91f908", []},
   "httpotion": {:hex, :httpotion, "0.2.4"},
   "ibrowse": {:git, "git://github.com/cmullaparthi/ibrowse.git", "7871e2ebe8811efb64e1917e2de455fa87e8dfe3", [tag: "v4.1.0"]},
   "plug": {:hex, :plug, "0.8.4"},
