@@ -87,6 +87,13 @@ ul.posts {
 .post-controls.controls-min {
 	padding: @unit/4 0px;
 	font-size: 85%;
+	a {
+		padding: 0px @unit/2;
+		border-right: 1px solid @light-grey;
+	}
+	a:last-of-type {
+		border-right: none;
+	}
 }
 .button-xsmall {
 	font-size: 70%;
@@ -105,7 +112,7 @@ ul.posts {
 		height: @unit;
 		background: @blue;
 		&.encoding {
-			background: @blue2;
+			background: @medium-grey;
 		}
 	}
 }

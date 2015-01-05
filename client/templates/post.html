@@ -12,9 +12,11 @@
 <div class="post-controls controls-min">
 	<% if(!hasView('makePost')) { %>
 		<a href="javascript:;" id="make-<%- parentPost %>-post-button">
-			New Post
+			new post
 		</a>
+		<a href="#post/<%- parent.get('key') %>">branch</a>
 	<% } %>
+
 </div>
 
 <div id="make-<%- parentPost %>-post" class="make-post"></div>
