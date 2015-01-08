@@ -26,6 +26,13 @@ module.exports = View.extend({
         this.render();
         this.delegateMakePostEvents();
         this.listenTo(this.posts, 'sync', this.onFetched);
+        this.listenTo(this.app.dispatcher, 'term.change', this.fetch);
+        this.fetch();
+        this.app.dispatcher.trigger('dht', 'watch:' + this.parentPost);
+    },
+
+
+    fetch: function() {
         this.posts.fetch();
     },
 
@@ -42,7 +49,6 @@ module.exports = View.extend({
     delegateMakePostEvents: function() {
         var events = {};
         var ev = 'click #make-' + this.parentPost + '-post-button';
-        console.log("delegate", ev);
         events[ev] = 'makePost';
         this.delegateEvents(events);
     },
@@ -53,7 +59,7 @@ module.exports = View.extend({
 
 
     makePost: function() {
-        console.log("make post")
+        console.log("make post");
         this.spawn(new this.MakePost({
             app: this.app,
             el: '#make-' + this.parentPost + '-post',

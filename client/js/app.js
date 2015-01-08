@@ -5,4 +5,4 @@ Backbone.$ = $;
 
 $(document).ready(function( ){
 	new Router();
-})
+});

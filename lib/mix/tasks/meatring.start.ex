@@ -1,10 +1,9 @@
 defmodule Mix.Tasks.Meatring.Start do
   use Mix.Task
-
+  require Logger
   @shortdoc "Starts application"
-
   @default_bind "http://localhost:8080"
-  @default_server_port 8081
+  @default_server_port "8081"
 
   defp switches do
     [
@@ -18,7 +17,8 @@ defmodule Mix.Tasks.Meatring.Start do
       h: :help,
       b: :bind,
       sid: :seed_id, 
-      loc: :seed_location
+      loc: :seed_location,
+      p: :server_port
     ]
   end
 
@@ -27,7 +27,8 @@ defmodule Mix.Tasks.Meatring.Start do
     parsed = OptionParser.parse(args, switches: switches, aliases: aliases)
     case parsed do
       {[help: true], _, _} -> :help
-      {options, _, _} -> Enum.into(options, %{})
+      {options, _, _} -> 
+        Enum.into(options, %{})
       _ -> :help
     end
   end
@@ -50,7 +51,7 @@ defmodule Mix.Tasks.Meatring.Start do
       Options:
         -h, [--help]            # Show this help message and quit.
         -b, [--bind]            # Bind to address [#{@default_bind}]
-        -s, [--server_port]     # bind server address [#{@default_server_port}]
+        -p, [--server_port]     # bind server address [#{@default_server_port}]
         -sid, [--seed_id]       # id of node already in network to attach to
         -loc [--seed_location]  # location of that node in the network
         -id, [--id]             # your node's id. if you haven't joined, it will be generated for you
@@ -62,16 +63,17 @@ defmodule Mix.Tasks.Meatring.Start do
   end
 
   defp process(%{seed_id: id, seed_location: loc} = options) do
-    desc = %Exkad.Node.Descriptor{id: loc, loc: loc}
+    desc = %Exkad.Node.Descriptor{id: id, loc: loc}
     
     options
       |> Dict.drop([:seed_id, :seed_location])
-      |> Dict.put(:descriptor, desc)
+      |> Dict.put(:seed, desc)
+      |> process
   end
 
 
-  defp process(options) do
-    options
+  defp process(%{server_port: str_val} = options) do
+    Dict.put(options, :server_port, String.to_integer(str_val))
   end
 
 
@@ -82,8 +84,8 @@ defmodule Mix.Tasks.Meatring.Start do
       :help -> :help
       args -> 
         #why the fuck isn't this working...
-        # Mix.Task.run("app.start", args)
-        Meatring.Supervisor.start_link(args)
+        IO.puts "app.start with #{inspect args}"
+        res = Mix.Task.run("app.start", args)
         :timer.sleep(:infinity)
     end
   end

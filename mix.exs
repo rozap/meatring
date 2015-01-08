@@ -15,7 +15,7 @@ defmodule Meatring.Mixfile do
   # Type `mix help compile.app` for more information
   def application do
     [
-      mod: {Meatring, []},
+      mod: {Meatring, %{bind: "http://localhost:8080", server_port: 8081}},
       applications: [:logger]
     ]
   end
@@ -33,7 +33,8 @@ defmodule Meatring.Mixfile do
     [
       {:exkad, git: "https://github.com/rozap/exkad.git"},
       {:plug, "~> 0.8.2"},
-      {:poison, "~> 1.2.0"}
+      {:poison, "~> 1.2.0"},
+      {:httpotion, "~> 0.2.0"},
     ]
   end
 end

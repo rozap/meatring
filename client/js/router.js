@@ -3,7 +3,7 @@ var Backbone = require('backbone');
 
 var Roots = require('./views/roots');
 var Post = require('./views/post');
-
+var Dispatcher = require('./dispatcher');
 
 module.exports = Backbone.Router.extend({
 
@@ -13,11 +13,14 @@ module.exports = Backbone.Router.extend({
 	},
 
 	initialize: function(opts) {
+		var dispatcher = new Dispatcher(function(err) {
+			if(err) console.warn("Error setting up socket, proceed in boring mode")
+			Backbone.history.start();
+		});
 		this.app = {
-			dispatcher: _.clone(Backbone.Events),
+			dispatcher: dispatcher.emitter(),
 			router: this
 		};
-		Backbone.history.start();
 
 	},
 
