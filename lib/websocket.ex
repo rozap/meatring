@@ -9,11 +9,6 @@ defmodule Meatring.Websocket do
     {:upgrade, :protocol, :cowboy_websocket}
   end
 
-  defp get_key(req) do
-    {_, key, _} = Request.parse_header("sec-websocket-key", req, :nothing)
-    key
-  end
-
   def websocket_init(_transport_name, req, opts) do
     Logger.info("ws init in #{inspect self}")
     {:ok, req, %{}}
@@ -22,10 +17,7 @@ defmodule Meatring.Websocket do
   def websocket_handle({:text, "watch:" <> term}, req, state) do
     Logger.info("#{inspect self} is watching #{term}")
     owner = self
-    DHT.watch(:exkad_node, term, fn(term) -> 
-      Logger.info("Dispatch from #{inspect owner} is #{term}")
-      # send(owner, {:change, get_key(req), term})
-    end)
+    DHT.watch(:exkad_node, term)
     {:reply, {:text, "ok"}, req, state}
   end
 
@@ -35,14 +27,10 @@ defmodule Meatring.Websocket do
   end
 
 
-  def websocket_info({:change, key, term}, req, state) do
-    case get_key(req) do
-      ^key -> 
-          msg = Poison.encode!(%{event: "term.change", term: term})
-          Logger.info("#{inspect self} Received watch notification for #{term} ----> #{msg}")
-          {:reply, {:text, msg}, req, state}
-      _ -> {:ok, req, state}
-    end
+  def websocket_info({:change, term}, req, state) do
+    msg = Poison.encode!(%{event: "term.change", term: term})
+    Logger.info("#{inspect self} Received watch notification for #{term} ----> #{msg}")
+    {:reply, {:text, msg}, req, state}
   end
 
   def websocket_info(info, req, state) do
