@@ -5,16 +5,26 @@ defmodule Meatring.Supervisor do
 
   defmodule NodeWrap do
     use GenServer
-    def start_link(options) do
-      GenServer.start_link(__MODULE__, options)
+    def start_link(_) do
+      GenServer.start_link(__MODULE__, [])
     end
 
-    def init(options) do
+    defp make_seed do
+      id = Application.get_env(:meatring, :seed_id, nil)
+      loc = Application.get_env(:meatring, :seed_location, nil)
+      if id != nil and loc != nil do
+        %Exkad.Node.Descriptor{id: id, loc: loc}
+      else
+        nil
+      end
+    end
+
+    def init(_) do
       {pid, descriptor} = Exkad.Node.Gateway.build_node(
-        options[:id],
-        options[:seed],
+        Application.get_env(:meatring, :id, nil),
+        make_seed,
         :http, 
-        options[:bind]
+        Application.get_env(:meatring, :bind, "http://localhost:8080")
       )
 
       Process.register(pid, :exkad_node)
@@ -28,9 +38,9 @@ defmodule Meatring.Supervisor do
     Supervisor.start_link(__MODULE__, options, name: Meatring.Supervisor)
   end
 
-  def init(options) do
+  def init(_) do
     children = [
-      worker(NodeWrap, [options])
+      worker(__MODULE__.NodeWrap, [[:foo]])
     ]
 
     plug = Meatring.Plug.API
@@ -46,7 +56,7 @@ defmodule Meatring.Supervisor do
     ]
 
     Plug.Adapters.Cowboy.http(plug, opts, [
-      port: options.server_port, 
+      port: Application.get_env(:meatring, :server_port, 8081), 
       dispatch: dispatch
     ])
 
