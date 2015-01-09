@@ -2,6 +2,9 @@ Meatring
 ========
 
 
+### a cross between chat.meatspac.es and a threaded forum, backed by a kademlia distributed hash table
+
+
 What you need to do: 
   1. install [elixir](http://elixir-lang.org/install.html)
   2. clone this repo
